@@ -8,6 +8,8 @@ Created on Tue Dec 17 13:46:34 2019
 
 DEFAULT_WIDTH = 4
 
+NULL = [0]*DEFAULT_WIDTH
+
 class Warning:
 	def __init__(self, message):
 		import sys
@@ -46,7 +48,7 @@ def toInt(a: (bool, ), signed=False):
 		return -int(toBin(INVERT(a)[0]), 2)
 
 def toBinTuple(a, width=DEFAULT_WIDTH):
-	return [bool(int(x)) for x in toBin(a, width)]
+	return [int(x) for x in toBin(a, width)]
 
 class Logic:
 	
@@ -129,7 +131,7 @@ class RippleCarryAdder(Logic):
 	def __call__(self, a: (bool, ), b: (bool, )) -> (bool, ):
 		a, b = list(a), list(b)
 		if len(a) != len(b) or len(a) != self.width:
-			raise Exception(f"Expected {self.width}-bit input (got {len(a)} bits)")
+			raise Exception(f"Expected {self.width}-bit input (got {len(a)} and {len(b)} bits)")
 			
 			
 		i = len(a)
@@ -140,7 +142,7 @@ class RippleCarryAdder(Logic):
 			c[i], cout = fulladder(a[i], b[i], cout)
 			
 		if cout and self.warning:
-			OverflowWarning(f"The sum of {toBin(a)} and {toBin(b)} is greater than {2**self.width-1}")
+			OverflowWarning(f"The sum of {toBin(a)} and {toBin(b)} is greater than {toBin(2**self.width-1)}")
 			
 		return tuple(c), cout
 	
@@ -148,27 +150,114 @@ ADD = RippleCarryAdder(DEFAULT_WIDTH)
 
 class Invert(Logic):
 	
+	def __init__(self, width=DEFAULT_WIDTH, warning=True):
+		self.warning = warning
+		self.width = width
+		self.ADD = RippleCarryAdder(width, False)
+	
 	def __call__(self, a) -> (bool, ):
 		c = [not(x) for x in a]
 		sign = c[0]
-		c, cout = ADD(c, toBinTuple(1, len(a)))
+		c, cout = self.ADD(c, toBinTuple(1, self.width))
 		overflow = OR(XOR(sign, c[0]), cout)
 		
-		if overflow:
+		if overflow and self.warning:
 			OverflowWarning(f"signed integer {toBin(a)} overflowed while inverting !")
 		return c, overflow
 	
 INVERT = Invert()
 
 class Substract(Logic):
-	def __init__(self, width=DEFAULT_WIDTH):
+	def __init__(self, width=DEFAULT_WIDTH, warning=True):
 		self.width = width
 		self.ADD = RippleCarryAdder(width, False)
+		self.INVERT = Invert(width, False)
+		self.warning = warning
 	
 	def __call__(self, a, b):
-
-		minus_b, overflow = INVERT(b)
+		
+		check_underflow = AND(a[0], NOT(b[0]))
+		minus_b, overflow = self.INVERT(b)
 		add_a_minus_b, overflow2 = self.ADD(a, minus_b)
-		return add_a_minus_b, overflow
+		underflow = AND(check_underflow, NOT(add_a_minus_b[0]))
+		if underflow and self.warning:
+			OverflowWarning(f"substraction of {toBin(a)} and {toBin(b)} underflowed")
+		return add_a_minus_b, underflow
 	
 SUB = Substract(DEFAULT_WIDTH)
+
+class LesserThan(Logic):
+	def __init__(self, signed=False, width=DEFAULT_WIDTH):
+		self.width = width
+		self.SUB = Substract(width, False)
+		#self.INVERT = Invert(width, False)
+		
+	def __call__(self, a, b):
+		#print(a, b)
+		a_minus_b, underflow = self.SUB(a, b)
+		return OR(underflow, a_minus_b[0])
+	
+LESSER = LesserThan()
+	
+class Equal(Logic):
+	def __init__(self, width=DEFAULT_WIDTH):
+		self.width = width
+		
+	def __call__(self, a, b):
+		for i in range(self.width):
+			if XOR(a[i], b[i]):
+				return 0
+		return 1
+	
+EQUAL = Equal()
+
+class LesserNotEqual(Logic):
+	def __init__(self, width=DEFAULT_WIDTH):
+		self.width = width
+		self.SUB = Substract(width, False)
+		
+	def __call__(self, a, b):
+		a_minus_b, underflow = self.SUB(a, b)
+		return OR(underflow, AND(a_minus_b[0], NOT(EQUAL(a_minus_b, NULL))))
+	
+LESSNEQ = LesserNotEqual()
+
+class ShiftLeft(Logic):
+	def __init__(self, width=DEFAULT_WIDTH):
+		self.width = width
+		self.LESSER = LesserThan(width)
+		
+	def __call__(self, a, n):
+		"""
+		a : number to shift
+		n : shift by how much. Should be int(log2(a)) bit long
+		"""
+		c = list(a)
+		
+		while NOT(self.LESSER(n, [0]*self.width)):
+			i = 0
+			while i < self.width-1:
+				c[i] = c[i+1]
+				i += 1
+				
+			n = SUB(n, toBinTuple(1, self.width))[0]
+			print("N = ", n)
+				
+		if a[0]:
+			OverflowWarning(f"Bit shift to the left overflowed")
+				
+		return c, a[0]
+	
+SHIFTL = ShiftLeft()
+
+class TruthTable:
+	def __init__(self, inputs=[(1,), (0, )], outputs=[(0,), (1, )]):
+		self.inputs = inputs
+		self.outputs = outputs
+		
+	def __call__(self, inputs):
+		if inputs in self.inputs:
+			return self.outputs[self.inputs.index(inputs)]
+		else:
+			raise ValueError('Input not in truth table !')
+			
