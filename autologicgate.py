@@ -378,11 +378,14 @@ class ShiftLeft(Logic):
 		a : number to shift
 		n : shift by how much. Should be int(log2(a)) bit long
 		"""
-		c = list(a)
+		c = a.copy()
 		
 		overflow = False
 		
-		while AND(NOT(self.LESSER(n, NULL)), NOT(EQUAL(n, NULL))):
+		while AND(
+					NOT(self.LESSER(n, Byte(NULL))),
+					NOT(EQUAL(n, Byte(NULL)))
+				):
 			i = 0
 			
 			if c[0]:
