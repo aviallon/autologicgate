@@ -100,16 +100,16 @@ class Byte:
 			exponent = [0, 0, 0, 0]
 			mantissa = [0, 0, 0]
 			
-			exp = math.floor(math.log2(a))
+			exp = math.floor(math.log2(a)+0.5)
 			if exp < 0:
 				
 				if exp == -1:
 					mantissa[0] = 1
-					exp = math.floor(math.log2(a - 2**exp + BIAS))
+					exp = math.floor(math.log2(a - 2**exp + BIAS)+0.5)
 				if exp == -2:
 					mantissa[1] = 1
 					#print(exp, a - 2**exp)
-					exp = math.floor(math.log2(a - 2**exp + BIAS))
+					exp = math.floor(math.log2(a - 2**exp + BIAS)+0.5)
 				if exp == -3:
 					mantissa[2] = 1
 					
@@ -117,11 +117,11 @@ class Byte:
 			else:
 				exponent = Byte(exp + 1, width=4)
 				mant = (a % 2**(exp)) / 2**exp
-				exp = math.floor(math.log2(mant + BIAS))
+				exp = math.floor(math.log2(mant + BIAS) + 0.5)
 				reste = mant - 2**exp
 				if exp == -1:
 					mantissa[0] = 1
-					exp = math.floor(math.log2(reste + BIAS))
+					exp = math.floor(math.log2(reste + BIAS) +0.5)
 					reste = reste - 2**exp
 				#print((mant - 2**exp))
 				if exp == -2:
@@ -130,7 +130,7 @@ class Byte:
 					#print(exp, a - 2**exp)
 					#print(reste + BIAS)
 					if reste > 0:
-						exp = math.floor(math.log2(reste + BIAS))
+						exp = math.floor(math.log2(reste + BIAS) + 0.5)
 						reste = reste - 2**exp
 				if exp == -3:
 					mantissa[2] = 1
@@ -711,7 +711,7 @@ def plotAdd(bits=8):
 	import numpy as np
 	import matplotlib.pyplot as plt
 	#from mpl_toolkits.mplot3d import Axes3D
-	nbs = np.linspace(150, 500, 100)
+	nbs = np.linspace(0, 5, 50)
 			
 	def _conv(x):
 		return Byte(float(x), width=bits)
