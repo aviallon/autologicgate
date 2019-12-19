@@ -13,6 +13,8 @@ NULL = [0]*DEFAULT_WIDTH
 
 BIAS = 1e-8
 
+DEBUG = False
+
 class Warning:
 	def __init__(self, message):
 		import sys
@@ -25,7 +27,9 @@ class UnderflowWarning(Warning):
 	pass
 
 class Debug(Warning):
-	pass
+	def __init__(self, *args):
+		if DEBUG:
+			super().__init__(" ".join([str(i) for i in args]))
 
 class WrongInputNumber(Exception):
 	"""
@@ -369,14 +373,22 @@ SUB = Substract(DEFAULT_WIDTH)
 class LesserThan(Logic):
 	def __init__(self, signed=False, width=DEFAULT_WIDTH):
 		self.width = width
-		self.SUB = Substract(width=width, warning=False)
+		if signed:
+			self.SUB = Substract(width=width, warning=False)
+		else:
+			self.SUB = Substract(width=width+1, warning=False)
+			
+		self.signed = signed
 		#self.INVERT = Invert(width, False)
 		
 	def __call__(self, a, b):
 		#print(a, b)
-		
+		if not(self.signed):
+			a = Byte([0]+a.bin)
+			b = Byte([0]+b.bin)
+			
 		a_minus_b, underflow = self.SUB(a, b)
-		#print("underflow ? ", underflow, "; A-B = ", a_minus_b)
+		#print("underflow =", underflow, "; A-B = ", a_minus_b)
 		return OR(underflow, a_minus_b[0])
 	
 LESSER = LesserThan()
@@ -409,7 +421,6 @@ class ShiftLeft(Logic):
 		self.width = width
 		self.filler = 0
 		self.warning = warning
-		self.LESSER = LesserThan(width)
 		
 	def __call__(self, a, n):
 		"""
@@ -417,14 +428,16 @@ class ShiftLeft(Logic):
 		n : shift by how much. Should be int(log2(a)) bit long
 		"""
 		c = a.copy()
-		self.LESSER = LesserThan(width=n.width)
-		self.NULL = Byte(0, n.width)
+		LESSER = LesserThan(width=n.width)
+		NULL = Byte(0, n.width)
+		EQUAL = Equal(width=n.width)
+		SUB = Substract(width=n.width)
 		
 		overflow = False
 		
 		while AND(
-					NOT(self.LESSER(n, Byte(NULL))),
-					NOT(EQUAL(n, Byte(NULL)))
+					NOT(LESSER(n, NULL)),
+					NOT(EQUAL(n, NULL))
 				):
 			i = 0
 			
@@ -435,7 +448,7 @@ class ShiftLeft(Logic):
 				i += 1
 			
 			c[-1] = self.filler
-			n = SUB(n, Byte(1, width=self.width))[0]
+			n = SUB(n, Byte(1, width=n.width))[0]
 			#print("N = ", n)
 			
 		if overflow and self.warning:
@@ -527,8 +540,8 @@ class AddFloat2(Logic):
 		self.ONE_exp = Byte(1, exp_len)
 		self.ONE_mant = Byte(1, mant_len+1+self.rounding_bits)
 		self.NULL_mant = Byte(0, mant_len+1+self.rounding_bits)
-		self.SHIFTR_mant = ShiftRight(width=mant_len+1+self.rounding_bits)
-		self.SHIFTR_mant_normal = ShiftRight(width=mant_len+1)
+		self.SHIFTR_mant = ShiftRight(width=mant_len+1+self.rounding_bits, warning=False)
+		self.SHIFTR_mant_normal = ShiftRight(width=mant_len+1, warning=False)
 		#self.SHIFTR_mant_onefill = ShiftRight(width=mant_len, filler=1)
 		self.ADD_exp = RippleCarryAdder(width=exp_len, warning=False)
 		self.ADD_mant = RippleCarryAdder(width=mant_len+1+self.rounding_bits, warning=False)
@@ -579,7 +592,9 @@ class AddFloat2(Logic):
 		Debug(f"I  ] b = {b}, sign_b = {sign_b}, exp_b = {exp_b}, mant_b = {mant_b}")
 		
 		delta_exp, sub_underflow = self.SUB_exp(exp_a, exp_b)
-		if self.LESSER_exp(delta_exp, self.NULL_exp): # delta_exp < 0
+		Debug(f'delta_exp = {delta_exp}')
+		if delta_exp[0]: # delta_exp < 0
+			Debug(f'swapping *_a and *_b because delta_exp < 0')
 			sign_a, exp_a, mant_a, sign_b, exp_b, mant_b = sign_b, exp_b, mant_b, sign_a, exp_a, mant_a
 			delta_exp, sub_underflow = self.SUB_exp(exp_a, exp_b)
 		
@@ -653,7 +668,7 @@ class AddFloat2(Logic):
 			
 		mant_c = Byte(mant_c[1:self.mantsize+1], width=self.mantsize)
 		
-		print(Byte([sign_c], width=1), Byte(exp_c.bin, width=self.expsize), Byte(mant_c.bin, width=self.mantsize))
+		Debug(Byte([sign_c], width=1), Byte(exp_c.bin, width=self.expsize), Byte(mant_c.bin, width=self.mantsize))
 		c = Byte([sign_c]+list(exp_c)+list(mant_c), width=self.size)
 		return c
 
@@ -665,6 +680,7 @@ def add_test(a, b):
 	bbin = Byte(float(b), width=8)
 	cbin = ADDFLOAT8(abin, bbin)
 	print(f"{float(abin)} + {float(bbin)} = {float(cbin)} ({str(abin)} + {str(bbin)} = {str(cbin)})")
+	return cbin
 
 class TruthTable:
 	def __init__(self, inputs=[(1,), (0, )], outputs=[(0,), (1, )]):
@@ -689,3 +705,33 @@ def plotFloat(bits=8):
 	ax = fig.add_subplot(111)
 	ax.plot(X, Y)
 	ax.grid(True)
+
+
+def plotAdd(bits=8):
+	import numpy as np
+	import matplotlib.pyplot as plt
+	#from mpl_toolkits.mplot3d import Axes3D
+	nbs = np.linspace(150, 500, 100)
+			
+	def _conv(x):
+		return Byte(float(x), width=bits)
+	#conv = np.vectorize(_conv)
+	nbs = [_conv(x) for x in nbs]
+	#print(nbs)
+	heatmap = np.zeros(shape=(len(nbs), len(nbs)))
+#	X = []
+#	Y = []
+#	Z = []
+	for i,x in enumerate(nbs):
+		for j,y in enumerate(nbs):
+#			X.append(float(x))
+#			Y.append(float(y))
+#			Z.append( float(ADDFLOAT8(x, y)))
+			heatmap[i, j] = float(ADDFLOAT8(x, y))
+			
+	#Y = conv(X)
+#	fig = plt.figure()
+#	ax = fig.add_subplot(111)
+#	ax.plot(xs=X,ys=Y, zs=Z)
+#	ax.grid(True)
+	plt.imshow(heatmap)
