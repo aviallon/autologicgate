@@ -1,0 +1,6 @@
+image: python:alpine
+
+test:
+  stage: test
+  script:
+    - python autologicgate.py test -v

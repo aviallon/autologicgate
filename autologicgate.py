@@ -13,7 +13,10 @@ NULL = [0]*DEFAULT_WIDTH
 
 BIAS = 1e-8
 
-DEBUG = False
+global DEBUG
+DEBUG = True
+
+call_stack = []
 
 class Warning:
 	def __init__(self, message):
@@ -121,8 +124,9 @@ class Byte:
 				reste = mant - 2**exp
 				if exp == -1:
 					mantissa[0] = 1
-					exp = math.floor(math.log2(reste + BIAS) +0.5)
-					reste = reste - 2**exp
+					if reste > 0:
+						exp = math.floor(math.log2(reste + BIAS) + 0.5)
+						reste = reste - 2**exp
 				#print((mant - 2**exp))
 				if exp == -2:
 					mantissa[1] = 1
@@ -234,17 +238,22 @@ class Byte:
 class Logic:
 	
 	def __call__(self, *args) -> bool:
+		call_stack.append(repr(self))
 		pass
 	
 	def __repr__(self):
 		if hasattr(self, 'name'):
 			return f'{self.name}'
 		else:
-			return f'{self.__class__.__name__}()'
+			widthinfo = ""
+			if "width" in self.__dir__():
+				widthinfo = f"width={self.width}"
+			return f'{self.__class__.__name__}({widthinfo})'
 
 class AndGate(Logic):
 	
 	def __call__(self, *args) -> bool:
+		call_stack.append(repr(self))
 		if len(args) != 2:
 			raise WrongInputNumber(f"Expected 2 inputs, got {len(args)}")
 		
@@ -253,6 +262,7 @@ class AndGate(Logic):
 class OrGate(Logic):
 	
 	def __call__(self, *args) -> bool:
+		call_stack.append(repr(self))
 		if len(args) != 2:
 			raise WrongInputNumber(f"Expected 2 inputs, got {len(args)}")
 		
@@ -261,6 +271,7 @@ class OrGate(Logic):
 class XorGate(Logic):
 	
 	def __call__(self, *args) -> bool:
+		call_stack.append(repr(self))
 		if len(args) != 2:
 			raise WrongInputNumber(f"Expected 2 inputs, got {len(args)}")
 		
@@ -269,6 +280,7 @@ class XorGate(Logic):
 class NotGate(Logic):
 	
 	def __call__(self,*args) -> bool:
+		call_stack.append(repr(self))
 		if len(args) != 1:
 			raise WrongInputNumber(f"Expected one input, got {len(args)}")
 		
@@ -277,6 +289,7 @@ class NotGate(Logic):
 class NandGate(Logic):
 	
 	def __call__(self,*args) -> bool:
+		call_stack.append(repr(self))
 		if len(args) != 2:
 			raise WrongInputNumber(f"Expected 2 input, got {len(args)}")
 		
@@ -292,7 +305,7 @@ NOT = NotGate()
 class FullAdder(Logic):
 	
 	def __call__(self, a: int, b: int, carry = 0) -> bool:
-		
+		#call_stack.append(repr(self))
 		firstXor = XOR(a, b) 
 		s = XOR(firstXor, carry)
 		passCarry = AND(firstXor, carry)
@@ -305,8 +318,8 @@ fulladder = FullAdder()
 
 class RippleCarryAdder(Logic):
 	def __init__(self, width=DEFAULT_WIDTH, warning=True):
+		#call_stack.append(repr(self))
 		self.width = width
-		self.name = f"RippleCarryAdder({width})"
 		self.warning = warning
 		
 	def __call__(self, a: Byte, b: Byte) -> (Byte, int):
@@ -555,6 +568,7 @@ class AddFloat2(Logic):
 		self.LESSER_rounding = LesserThan(signed=False, width=self.rounding_bits)
 		
 	def __call__(self, a, b):
+		call_stack.clear()
 		if len(a) != len(b) or len(a) != self.size:
 			raise ValueError(f'Expected {self.size} bit float ! Got {len(a)} and {len(b)}')
 			
@@ -675,12 +689,110 @@ class AddFloat2(Logic):
 #ADDFLOAT8_v2 = AddFloat2(exp_len=4, mant_len=3)
 ADDFLOAT8 = AddFloat2(exp_len=4, mant_len=3)
 
+class MultiplyInteger(Logic):
+	def __init__(self, width=DEFAULT_WIDTH):
+		self.INVERT = Invert(width=width, warning=True)
+		self.ADD = RippleCarryAdder(width=width, warning=True)
+		self.width = width
+		self.SHIFTL = ShiftLeft(width=width, warning=True)
+		
+	def __call__(self, a, b):
+		signed = OR(a.signed, b.signed)
+		different_sign = False
+		if signed:
+			different_sign = XOR(a[0], b[0])
+			if a[0]:
+				a, _ = self.INVERT(a)
+			if b[0]:
+				b, _ = self.INVERT(b)
+			
+		#Debug(f"a={a}, b={b}, signed={signed}, different_sign = {different_sign}")
+			
+		overflow = False
+		c = Byte(0, width=self.width, signed=signed)
+		i = self.width
+		while i > 0:
+			i -= 1
+			if b[i]:
+				ashift, shift_of = self.SHIFTL(a, Byte(self.width-i-1, width=self.width))
+				c, add_of = self.ADD(c, ashift)
+				Debug(f"shift_of = {shift_of}, add_of={add_of}")
+				overflow = OR(OR(shift_of, add_of), overflow)
+		
+		if different_sign:
+			c, inv_overflow = self.INVERT(c)
+			overflow = OR(overflow, inv_overflow)
+			Debug(f"We did invert c because signs were opposite...")
+			
+		if (c[0] != 0 and not(different_sign)) or (c[0] != 1 and different_sign) and signed:
+				overflow = 1
+			
+		if overflow:
+			OverflowWarning(f"Overflow during multiplication of {a} ({int(a)}) by {b} ({int(b)})")
+
+			
+		return c, overflow
+	
+MUL = MultiplyInteger(width=DEFAULT_WIDTH)
+
+call_stack.clear()
+
 def add_test(a, b):
+	
 	abin = Byte(float(a), width=8)
 	bbin = Byte(float(b), width=8)
 	cbin = ADDFLOAT8(abin, bbin)
 	print(f"{float(abin)} + {float(bbin)} = {float(cbin)} ({str(abin)} + {str(bbin)} = {str(cbin)})")
 	return cbin
+
+def test_addf(a, b):
+	"""
+	Tries to add two floating point numbers
+	
+	>>> test_addf(2, 3)
+	5.0
+	>>> test_addf(-2, 2)
+	0.0
+	>>> test_addf(1.25, 0.25)
+	1.5
+	"""
+	abin = Byte(float(a), width=8)
+	bbin = Byte(float(b), width=8)
+	cbin = ADDFLOAT8(abin, bbin)
+	return float(cbin)
+
+def test_addi(a, b):
+	"""
+	Tries to add two integers:
+	
+	>>> test_addi(2, 3)
+	5
+	>>> test_addi(-2, 2)
+	0
+	>>> test_addi(1, 0)
+	1
+	"""
+	abin = Byte(int(a), width=8)
+	bbin = Byte(int(b), width=8)
+	cbin, _ = RippleCarryAdder(width=8)(abin, bbin)
+	return int(cbin)
+
+def test_muli(a, b):
+	"""
+	Tries to add two integers:
+	
+	>>> test_muli(2, 3)
+	6
+	>>> test_muli(-2, 2)
+	-4
+	>>> test_muli(1, 0)
+	0
+	"""
+	abin = Byte(int(a), width=8)
+	bbin = Byte(int(b), width=8)
+	cbin, _ = MultiplyInteger(width=8)(abin, bbin)
+	return int(cbin)
+
 
 class TruthTable:
 	def __init__(self, inputs=[(1,), (0, )], outputs=[(0,), (1, )]):
@@ -735,3 +847,13 @@ def plotAdd(bits=8):
 #	ax.plot(xs=X,ys=Y, zs=Z)
 #	ax.grid(True)
 	plt.imshow(heatmap)
+	
+if __name__ == "__main__":
+	import sys
+	#print(sys.argv)
+	if len(sys.argv) > 1:
+		if sys.argv[1] == "test":
+			DEBUG = False
+			import doctest
+			test = doctest.testmod()
+			exit(test.failed)
