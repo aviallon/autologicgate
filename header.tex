@@ -1,0 +1,78 @@
+% Essential packages
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage[french]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{stmaryrd}
+\usepackage{xstring}
+
+% Maths
+
+% Page footer
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{1pt}
+\fancyhf{}
+\fancyfoot[RE,LO]{
+  S. Daviau% - \tiny{Unauthorized sharing is prohibited}
+}
+\fancyfoot[LE,RO]{Page \thepage/\pageref{LastPage}}
+
+% Smaller title
+%\renewcommand{\title}[1]{
+%  \renewcommand{\maketitle}{\textbf{\Large #1}}
+%}
+
+% Table of content takes too much place
+\makeatletter
+\renewcommand*\l@section{\vspace{12pt}\bfseries\@dottedtocline{1}{0em}{2em}}
+\renewcommand*\l@subsection{\normalfont\@dottedtocline{1}{0em}{2em}}
+\renewcommand*\l@subsubsection{\normalfont\@dottedtocline{1}{2em}{3.5em}}
+\makeatother
+
+% More space between equation lines
+\renewcommand*{\arraystretch}{1.5}
+
+\newcommand{\printendofdocument}{
+\begin{center}
+\end{center}
+}
+
+% Shortcuts for faster writing
+
+%\everymath{\displaystyle}
+
+\def\R{\ensuremath{\mathbb{R}}}
+\def\N{\ensuremath{\mathbb{N}}}
+\def\K{\ensuremath{\mathbb{K}}}
+\def\C{\ensuremath{\mathbb{C}}}
+
+\def\eq{\ensuremath{\Leftrightarrow}}
+\def\x{\ensuremath{\times}}
+\def\ac{\ensuremath{\left\{}}
+\def\fac{\ensuremath{\right\}}}
+\def\vec{\ensuremath{\overrightarrow}}
+\def\ul{\ensuremath{\underline}}
+\def\impl{\ensuremath{\Rightarrow}}
+\def\tend{\ensuremath{\longrightarrow}}
+\def\dd{\ensuremath{\,\mathrm{d}}}
+\def\Pext{\ensuremath{\mathrm{P_{ext}}}}
+\def\up{\textsuperscript}
+\def\gdO{\ensuremath{\mathcal{O}}}
+\def\ptO{\ensuremath{\mathcal{o}}}
+\def\associe{\ensuremath{\longmapsto}}
+\newcommand{\e}[1]{\ensuremath{\,\mathrm{e}^{#1}}}
+\newcommand{\ctn}[2]{%
+    \IfStrEq{#2}{}{%
+        \ensuremath{\mathrm{C}^{#1}}
+    }{%
+        \ensuremath{\mathcal{C}^{#1}(#2)}
+    }
+}
+
+\newcommand{\serie}[1][0]{%
+\ensuremath{{\displaystyle \sum^{+\infty}_{n=#1}}}
+}
