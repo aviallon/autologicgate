@@ -1,0 +1,33 @@
+; Division
+byte    a   #16
+byte    b   #0b10
+byte    res   U3
+
+start:
+        MOV U1, a
+        MOV U2, b
+        CALL DIV
+        DISP res
+        HALT
+        
+; Library
+        
+DIV:
+        MOV A,U1 ; move parameters to work registers
+        MOV B,U2
+        MOV U1,B
+        
+        CMP U2,#0
+        JMPNEQ div_loop
+        ABRT
+div_loop:
+        SUB A,U1 ; we substract b to a' once
+        CMP A,#0 ; if the result is superior to 0, then we increment the quotient, and retest
+        JMPGT div_next
+        JMP div_end
+div_next:
+        INC res
+        JMP div_loop
+div_end:
+        RET
+        
