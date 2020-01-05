@@ -301,6 +301,15 @@ AND = AndGate()
 OR = OrGate()
 NAND = NandGate()
 NOT = NotGate()
+
+class HalfAdder(Logic):
+	
+	def __call__(self, a: int, b: int) -> bool:
+		#call_stack.append(repr(self))
+		s = XOR(a, b) 
+		carry = AND(a, b)
+		
+		return s, carry
 	
 class FullAdder(Logic):
 	
@@ -522,12 +531,29 @@ class ShiftRight(Logic):
 SHIFTR = ShiftRight()
 	
 class Increment(Logic):
-	def __init__(self, width=DEFAULT_WIDTH):
+	def __init__(self, width=DEFAULT_WIDTH, warning=True):
 		self.width = width
-		self.ADD = RippleCarryAdder(width=width, warning=False)
+		self.warning = warning
+		self.HalfAdd = HalfAdder()
 		
-	def __call__(self, a):
-		a.bin = self.ADD(a, Byte(1, self.width))[0].bin
+	def __call__(self, a: Byte) -> (Byte):
+		if len(a) != self.width:
+			raise Exception(f"Expected {self.width}-bit input (got {len(a)})")
+			
+			
+		i = len(a)
+		c = Byte(0, width=self.width, signed=a.signed)
+		carry = 1
+		while i > 0:
+			i -= 1
+			c[i], carry = self.HalfAdd(a[i], carry)
+			
+		if carry and self.warning:
+			OverflowWarning(f"Incrementing {str(Byte(a))} overflowed")
+			
+		return c, carry
+			
+INC = Increment(width=DEFAULT_WIDTH)
 	
 class Absolute(Logic):
 	def __init__(self, width=DEFAULT_WIDTH):
@@ -735,6 +761,76 @@ class MultiplyInteger(Logic):
 	
 MUL = MultiplyInteger(width=DEFAULT_WIDTH)
 
+class TruthTable:
+	def __init__(self, inputs=[(1,), (0, )], outputs=[(0,), (1, )]):
+		self.inputs = inputs
+		self.outputs = outputs
+		
+	def __call__(self, inputs):
+		if inputs in self.inputs:
+			return self.outputs[self.inputs.index(inputs)]
+		else:
+			raise ValueError('Input not in truth table !')
+
+class Divider(Logic):
+	def __init__(self, width=DEFAULT_WIDTH, signed=False):
+		self.SUB = Substract(width=width, warning=True)
+		self.LESSER = LesserThan(width=width, signed=signed)
+		self.INC = Increment(width=width)
+		self.INVERT = Invert(width=width, warning=True)
+		self.width = width
+		self.signed = signed
+	
+	def __call__(self, a, b):
+		
+		negative = 0
+		
+		if self.signed:
+			negative = AND(OR(a.signed, b.signed), XOR(a[0], b[0]))
+			if a[0] and a.signed:
+				a, _ = self.INVERT(a)
+			if b[0] and b.signed:
+				b, _ = self.INVERT(b)
+				
+		r = a.copy()
+		q = Byte(0, self.width)
+		
+			
+		while NOT(self.LESSER(r, b)):
+			r, _ = self.SUB(r, b)
+			Debug(f"q = {repr(q)}")
+			q, _ = self.INC(q)
+			
+		if negative:
+			Debug(q)
+			q, _ = self.INC(q)
+			q, _ = self.INVERT(q)
+			
+		if self.signed:
+			q.signed = True
+			
+		return q, r
+	
+UDIV = Divider()
+DIV = Divider(signed=True)
+
+a = Byte(-7, width=DEFAULT_WIDTH, signed=True)
+b = Byte(2, width=DEFAULT_WIDTH, signed=True)
+q, r = DIV(a, b)
+	
+	
+	
+#########################
+# TESTS PART
+#########################
+	
+	
+	
+	
+	
+	
+	
+
 call_stack.clear()
 
 def add_test(a, b):
@@ -792,18 +888,6 @@ def test_muli(a, b):
 	bbin = Byte(int(b), width=8)
 	cbin, _ = MultiplyInteger(width=8)(abin, bbin)
 	return int(cbin)
-
-
-class TruthTable:
-	def __init__(self, inputs=[(1,), (0, )], outputs=[(0,), (1, )]):
-		self.inputs = inputs
-		self.outputs = outputs
-		
-	def __call__(self, inputs):
-		if inputs in self.inputs:
-			return self.outputs[self.inputs.index(inputs)]
-		else:
-			raise ValueError('Input not in truth table !')
 			
 def plotFloat(bits=8):
 	import numpy as np
