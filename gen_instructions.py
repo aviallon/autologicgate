@@ -5,6 +5,8 @@ Created on Tue Dec 31 15:27:22 2019
 
 @author: aviallon
 """
+#global DEBUG
+#DEBUG = True
 
 from instructions import instructions, micro_inst, micro_inst_number, high_lvl_instructions, registers, instructions_sorted, high_lvl_instructions_ordered
 		
@@ -95,15 +97,17 @@ _Available registers :_
 
 - `A`: multi-purpose register. Is not overwriten quietly.
 - `B`: work register. Used in many operations as a buffer
-- `U\#`: user registers. Will **never** be overwritten unless _explicitely_ mentionned (see the instructions for more detail). There are only 1 of those currently.
+- `U\#`: user registers. Will **never** be overwritten unless _explicitely_ mentionned (see the instructions for more detail). There are only 4 of those currently.
 - `ret`: not directly accessible. Used with `CALL` and `RET`
 - `cmp`: not directly accessible. Used with `CMP` and `JMPxxx`
+- `disp`: used to display something in decimal. Write-only.
+- `C` : single bit register
 
 # High level instructions
 """)
 		
 		for i,inst in enumerate(high_lvl_instructions_ordered):
-			inst_paragraph = f"## {escape_for_marktex(inst)}\n"
+			inst_paragraph = f"\n\\vbox{{\n## {escape_for_marktex(inst)}\n"
 			inst_paragraph += f"_{escape_for_marktex(high_lvl_instructions[inst]['description'])}_\n"
 			for j,variant in enumerate(high_lvl_instructions[inst]["variants"]):
 				low_level_insts = high_lvl_instructions[inst]['instructions'][j]
@@ -112,25 +116,34 @@ _Available registers :_
 				if type(low_level_insts) != tuple:
 					low_level_insts = (low_level_insts,)
 				
+				low_inst_name = ""
 				for low_level_inst in low_level_insts:
 					size += len(low_level_inst)
 					low_inst_name = low_level_inst[0].replace("_R", "_A")
 					low_inst_name = low_inst_name.replace("_U#", "_U0")
 					low_inst_name = low_inst_name.replace("_bit_%b", "_bit_0")
 					duration += len(instructions[low_inst_name]) + len(instructions["default"])
-				inst_paragraph += f"- `{escape_for_marktex(inst)} {escape_for_marktex(variant)}` (size: {size}, duration: {duration})\n"
-			inst_paragraph += "\n\n"
+				label = low_inst_name.replace("_", "")
+				inst_paragraph += f"- \\\\hyperlink{{{label}}}{{`{escape_for_marktex(inst)} {escape_for_marktex(variant)}`}} (size: {size}, duration: {duration})\n"
+			inst_paragraph += "}\n\n"
 			file.write(inst_paragraph)
 			
 		file.write(
 """
 # Instructions (low level)
-\small
+\\\\small
 """)
-		
+		current_op = instructions_sorted[0].split("_")[0]
+		file.write(f"## {current_op}\n")
 		for i,inst in enumerate(instructions_sorted):
+			op_name = inst.split("_")[0]
+			if op_name != current_op:
+				current_op = op_name
+				file.write(f"## {current_op}\n")
 			code = hex(i)[2:].zfill(8//4)
-			inst_paragraph = f"\\begin{{samepage}}\n#### {escape_for_marktex(inst)} : `0x{code}`\n_Micro-instructions :_\n"
+			inst_name = escape_for_marktex(inst)
+			label = inst.replace("_", "")
+			inst_paragraph = f"\\\\vbox{{\n\\\\hypertarget{{{label}}}{{}}\n### {inst_name} : `0x{code}`\n_Micro-instructions :_\n\\begin{{multicols}}{{2}}\n"
 			for i,mi_line in enumerate(instructions[inst]):
 				inst_paragraph += f"{i}. "
 				for i,mi in enumerate(mi_line):
@@ -140,7 +153,7 @@ _Available registers :_
 				inst_paragraph += " <br>\n"
 			file.write(inst_paragraph)
 			
-		file.write("\\end{samepage}\n")
+			file.write("\\end{multicols}}\n")
 		import os
 		os.system("~/bin/marktex -c description.Rmd")
 		

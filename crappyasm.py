@@ -20,61 +20,149 @@ class UndefinedInstruction(Error):
 class UndefinedInstructionVariant(Error):
 	pass
 
+class UndefinedVar(Error):
+	pass
+
 class NotEnoughAddressableMemory(Error):
 	pass
+
+def find_similar(search_key, liste):
+	found = True
+	foundname = False
+	x = 2
+	while found:
+		found = False
+		index = 0
+		while index < len(liste):
+			if search_key[:x] in liste[index]:
+				found = True
+				break
+			index += 1
+		
+		if found:
+			foundname = liste[index]
+		x += 1
+		if x > len(search_key):
+			break
+		
+	return foundname
+
+identifier_regex = "[a-zA-Z_][a-zA-Z0-9_]*"
 
 def inst_split(string):
 	ligne = re.split("(\s+)|,", string)
 	return list(filter(lambda x: x is not None and x != " " and x != "", ligne))
 
-def assembler(data, address_bits=8):
-	jumplist = {}
-	variables = {}
+def get_syslib():
+	syslib = """\
+; System Library
+byte    param1    U1
+byte    param2    U2
+byte    res    U3
+
+        JMP start
+DIV:
+        MOV A,param1 ; move parameters to work registers
+        MOV B,param2
+        MOV U1,B
+        
+        CMP param2,#0
+        JMPNEQ _div_loop
+        ABRT
+_div_loop:
+        SUB A,U1 ; we substract b to a' once
+        CMP A,#0 ; if the result is superior to 0, then we increment the quotient, and retest
+        JMPGT _div_next
+        JMP _div_end
+_div_next:
+        INC res
+        JMP _div_loop
+_div_end:
+        RET
+"""
+	return syslib.split("\n")
+
+def assembler(data, address_bits=8, debug=False, verbose=True):
 	machine_code = []
 	lines = data.split("\n")
-	lignes_labelisees = []
-	for i,l in enumerate(lines):
+	includes = []
+	for i, l in enumerate(lines):
 		ligne = l.strip("\t").strip(" ")
 		ligne = re.split(";.*", ligne)[0]
-		regex = "byte\s+([a-zA-Z][a-zA-Z0-9_]*)\s+((?:[\#@](?:0x)?[0-9A-Fa-f]+)|U[0-3]|A|B)"
-		if temp := re.findall(regex, ligne):
-			print(temp)
-			variables[temp[0][0]] = temp[0][1]
-			ligne = re.split("byte\s+[a-zA-Z][a-zA-Z0-9_]*\s+(?:[\#@](?:0x)?[0-9A-Fa-f]+)|U[0-3]|A|B", ligne, 1)[1]
-		jump = ""
-		if temp := re.findall("([a-zA-Z][a-zA-Z0-9_]+):\s*", ligne):
-			jump = temp[0]
-			jumplist[jump] = -1
-			ligne = re.split("[a-zA-Z][a-zA-Z0-9_]+:\s*", ligne, 1)[1]
+		if temp := re.findall("^include\s+("+identifier_regex+")", ligne):
+			includes.append(temp[0])
+			lines[i] = ""
+	
+	if "syslib" in includes:
+		lines = get_syslib() + lines
+	
+	def secondpass(lines):
+		jumplist = {}
+		variables = {}
+		includes = []
+		lignes_labelisees = []
+		for i,l in enumerate(lines):
+			ligne = l.strip("\t").strip(" ")
+			ligne = re.split(";.*", ligne)[0]
+			regex = "byte\s+("+identifier_regex+")\s+((?:[\#@](?:0x)?[0-9A-Fa-f]+)|U[0-3]|A|B)"
+			if temp := re.findall(regex, ligne):
+				if debug:
+					print(temp)
+				if temp[0][0] in variables:
+					raise Error(f"Redifinition of variable {temp[0][0]}")
+				variables[temp[0][0]] = temp[0][1]
+				ligne = ""
+			jump = ""
+			if temp := re.findall("^("+identifier_regex+"):\s*", ligne):
+				jump = temp[0]
+				if jump in jumplist:
+					raise Error(f"Labels must be unique, found {jump} more than once")
+				jumplist[jump] = -1
+				ligne = re.split(identifier_regex+":\s*", ligne, 1)[1]
+			include = ""
+			
+			if data != "":
+				lignes_labelisees += [{"label":jump, "data": ligne}]
+		return jumplist, variables, lignes_labelisees
+	
+	jumplist, variables, lignes_labelisees = secondpass(lines)
 		
-		if data != "":
-			lignes_labelisees += [{"label":jump, "data": ligne}]
-		
-	print("Jumplist :", jumplist)
-	print("Variables : ", variables)
+	if "start" not in jumplist:
+		raise Exception("start symbol is needed !")
+	
+	if verbose:
+		print("Jumplist :", jumplist)
+		print("Variables : ", variables)
 	#print(lignes_labelisees)
 	
 	for k,l in enumerate(lignes_labelisees):
 		ligne = inst_split(l["data"])
-		if len(ligne) > 0 or l["label"] != "":
+		if verbose and (len(ligne) > 0 or l["label"] != ""):
 			print(f"-------------\nLine {k+1}/{len(lignes_labelisees)}\n-------------")
 		if l["label"] != "":
-			print(f'Label \033[1m{l["label"]}\033[0m found at {len(machine_code)}')
+			if verbose:
+				print(f'Label \033[1m{l["label"]}\033[0m found at {len(machine_code)}')
 			#print(l)
 			jumplist[l["label"]] = len(machine_code)
 		if len(ligne) > 0:
-			print("\tASM : ", " ".join(ligne))
+			if verbose:
+				print("\tASM : ", " ".join(ligne))
 			if ligne[0] not in high_lvl_instructions:
+				if hint_instruction := find_similar(ligne[0], list(high_lvl_instructions.keys())):
+					print(f"\n\033[1m\033[36mHint:\033[0m Instruction \033[1m{ligne[0]}\033[0m is perhaps mispelled : \033[1m{hint_instruction}\033[0m found in the instruction set\n")
+
 				raise UndefinedInstruction(f"{ligne[0]} does not exists in the instruction set !")
 			instruction = high_lvl_instructions[ligne[0]]
-			print("\tInstruction: ", instruction["description"])
+			if verbose:
+				print("\tInstruction: ", instruction["description"])
 			args = ligne[1:]
 			not_found_arg = ""
 			for k,variant in enumerate(instruction["variants"]):
 				variant = inst_split(variant)
 				if len(variant) != len(args):
-					print("too short")
-					print(args, variant)
+					if debug:
+						print("len(variant) and len(args) don't match")
+						print(args, variant)
 					continue
 				
 				ok = True
@@ -83,10 +171,20 @@ def assembler(data, address_bits=8):
 				uregister_names = []
 				placeholders = []
 				for i in range(len(variant)):
-					print(f"{i} : Comparing {args[i]} to {variant[i]}")
+					if debug:
+						print(f"{i} : Comparing {args[i]} to {variant[i]}")
 					cur_arg = args[i]
 					if cur_arg in variables.keys():
 						cur_arg = variables[cur_arg]
+					elif cur_arg in jumplist.keys():
+						pass
+					elif cur_arg in registers:
+						pass
+					elif re.match(identifier_regex, cur_arg):
+						if hint_var := find_similar(cur_arg, list(variables.keys())):
+							print(f"\n\033[1m\033[36mHint:\033[0m Variable name \033[1m{cur_arg}\033[0m is perhaps mispelled : \033[1m{hint_var}\033[0m found\n")
+						raise UndefinedVar(f"{cur_arg} was not found and is not a jump label")
+
 					
 					base = 10
 					if cur_arg[1:2+1] == "0x":
@@ -96,7 +194,8 @@ def assembler(data, address_bits=8):
 					if variant[i] == "%b" and cur_arg[0] == "#":
 						placeholders += [int(cur_arg[1:], base)]
 					elif cur_arg in registers and (variant[i] == "R" or variant[i] == cur_arg or cur_arg[0] == "U" and variant[i] == "U#"):
-						#print(f"Operand {i} is a register ({args[i]})")
+						if debug:
+							print(f"Operand {i} is a register ({args[i]})")
 						reg = cur_arg
 						if variant[i] == "U#":
 							uregister_names += [reg]
@@ -105,16 +204,19 @@ def assembler(data, address_bits=8):
 					elif cur_arg[0] == variant[i][0] and variant[i][0] == "@":
 						#print(args[i])
 						vals += [int(cur_arg[1:], base)]
-						#print(f"Operand {i} is an address ({vals[-1]})")
+						if debug:
+							print(f"Operand {i} is an address ({vals[-1]})")
 					elif cur_arg[0] == "#" and cur_arg[0] == variant[i][0]:
 						#print(args[i])
 						vals += [int(cur_arg[1:], base)]
-						#print(f"Operand {i} is a value ({vals[-1]})")
+						if debug:
+							print(f"Operand {i} is a value ({vals[-1]})")
 					elif cur_arg in jumplist.keys() and variant[i][0] == "#":
 						vals += [cur_arg]
 					else:
 						not_found_arg = cur_arg
-						print("Couldn't find variant !", instruction["variants"][k], args)
+						if debug:
+							print("Couldn't find variant !", instruction["variants"][k], args)
 						ok = False
 						break
 				#print(vals)
@@ -128,14 +230,16 @@ def assembler(data, address_bits=8):
 						for reg in uregister_names:
 							real_instruction = real_instruction.replace("_U#", "_"+reg, 1)
 													  
-						print("\tReal instruction :", real_instruction, end=' ')
-						for val in vals:
-							if type(val) == int:
-								val = hex(val)
-							print(val, end=' ')
-						print("")
-						#print("register_names :", register_names)
-						#print("uregister_names :", uregister_names)
+						if verbose:
+							print("\tReal instruction :", real_instruction, end=' ')
+							for val in vals:
+								if type(val) == int:
+									val = hex(val)
+								print(val, end=' ')
+							print("")
+						if debug:
+							print("register_names :", register_names)
+							print("uregister_names :", uregister_names)
 						
 						
 						instruction_code = hex(instructions_sorted.index(real_instruction))[2:].zfill(8//4)
@@ -165,34 +269,15 @@ def assembler(data, address_bits=8):
 					break
 				
 			else: # else after a for, yes, very pythonic
+				
 				if not_found_arg != "":
-					found = True
-					jumpfound = ""
-					x = 2
-					while found:
-						found = False
-						key = 0
-						#print("test")
-						while key < len(jumplist.keys()):
-							#print(key, list(jumplist.keys())[key])
-							if not_found_arg[:x] in list(jumplist.keys())[key]:
-								found = True
-								break
-							key += 1
-						
-						if found:
-							jumpfound = list(jumplist.keys())[key]
-						x += 1
-						if x > len(not_found_arg):
-							break
-					#print(found, jumpfound, x, cur_arg[:x])
-					if jumpfound != "":
+					if jumpfound := find_similar(not_found_arg, list(jumplist.keys())):
 						print(f"\n\033[1m\033[36mHint:\033[0m Label \033[1m{not_found_arg}\033[0m is perhaps mispelled : \033[1m{jumpfound}\033[0m found in the jumplist\n")
 						
 				raise UndefinedInstructionVariant(f"Instruction {ligne[0]} can't be used with given args")
 					
-				  
-	print("\nJumplist (completed) :", jumplist)
+	if verbose:
+		print("\nJumplist (completed) :", jumplist)
 	for i, m in enumerate(machine_code):
 		if m in jumplist.keys():
 			machine_code[i] = hex(jumplist[m])[2:].zfill(8//4)
@@ -202,6 +287,8 @@ def assembler(data, address_bits=8):
 if __name__ == "__main__":
 	import argparse
 	parser = argparse.ArgumentParser()
+	parser.add_argument("-d", "--debug", dest="debug", action="store_true", help="enable debug mode, activates verbose")
+	parser.add_argument("-v", "--verbose", dest="verbose", action="store_true", help="enable debug mode")
 	parser.add_argument('-o', '--output', dest="output", metavar="OUTPUT_FILE", help="output file", default="ram.txt")
 	parser.add_argument(metavar="INPUT_FILE", dest="input", help="input file", default="prog.crapasm")
 	args = parser.parse_args()
@@ -215,7 +302,7 @@ if __name__ == "__main__":
 	
 	print("================")
 	
-	mcode = assembler(data, address_bits)
+	mcode = assembler(data, address_bits, args.debug, args.verbose or args.debug)
 	
 	print("================")
 	

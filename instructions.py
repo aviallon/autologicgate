@@ -6,6 +6,12 @@ Created on Sat Jan  4 18:46:42 2020
 @author: aviallon
 """
 
+if "DEBUG" not in globals() and "DEBUG" not in locals():
+	DEBUG = False
+	
+if __name__ == "__main__":
+	DEBUG = True
+
 micro_inst_number = 64
 
 micro_inst = {
@@ -59,6 +65,10 @@ micro_inst = {
 	  "outU3":47,
 	  "flipLed":48,
 	  "loadDisplay":49,
+	  "loadC":50,
+	  "cond_C":51,
+	  "enableDEC":52,
+	  "loadSleep":53,
 	  "error":63
 	  }
 
@@ -245,6 +255,26 @@ instructions = {
 				["outRAM", "loadDisplay"],
 				["clearMIcounter"]
 				],
+		"SLEEP_const": [
+				["outPC", "loadRAM"],
+				["outRAM", "loadSleep", "incPC"],
+				["clearMIcounter"]
+				],
+		"SLEEP_mem": [
+				["outPC", "loadRAM"],
+				["outRAM", "loadMemAddr", "incPC"],
+				["loadRAM", "outMemAddr"],
+				["outRAM", "loadSleep"],
+				["clearMIcounter"]
+				],
+		"SUB_B_to_A": [
+				["outB", "enableNOT", "loadALU"],
+				["outALU", "enableInc", "loadALU"],
+				["outALU", "loadB"],
+				["enableAdd", "loadALU", "outA"],
+				["outALU", "loadA"],
+				["clearMIcounter"]
+				],
 		}
 
 templates = {
@@ -316,6 +346,12 @@ templates = {
 				["outA", "loadB"],
 				["enableAdd", "loadALU", "out%R"],
 				["outALU", "load%R"],
+				["clearMIcounter"]
+				],
+		"ADD_%U_to_A": [
+				["out%U", "loadB"],
+				["enableAdd", "loadALU", "outA"],
+				["outALU", "loadA"],
 				["clearMIcounter"]
 				],
 		"ADD_%R_to_mem": [ 
@@ -433,6 +469,10 @@ templates = {
 				["out%RB", "loadDisplay"],
 				["clearMIcounter"]
 				],
+		"SLEEP_%RB": [
+				["out%RB", "loadSleep", "incPC"],
+				["clearMIcounter"]
+				],
 		}
 
 from copy import deepcopy
@@ -484,10 +524,12 @@ for key in templates.keys():
 			generated += [(instruction_name, cur_gen)]
 					
 	for gen in generated:
-		print(f"Generated {gen[0]}...")
+		if DEBUG:
+			print(f"Generated {gen[0]}...")
 		instructions[gen[0]] = gen[1]
-		
-print(f"{len(instructions)}/{2**8} instructions in total !")
+
+if DEBUG:
+	print(f"{len(instructions)}/{2**8} instructions in total !")
 		
 if len(instructions) > 256:
 	raise ValueError("Too many instructions !")
@@ -495,8 +537,9 @@ if len(instructions) > 256:
 high_lvl_instructions = {
 		"ADD":
 			{
-				"variants": ["R, B", "R, A", "R, @0xHH", "R, #0xHH", "@0xHH, @0xHH", "@0xHH, R", "#0xHH, #0xHH", "@0xHH, #0xHH"],
+				"variants": ["A, U#", "R, B", "R, A", "R, @0xHH", "R, #0xHH", "@0xHH, @0xHH", "@0xHH, R", "#0xHH, #0xHH", "@0xHH, #0xHH"],
 				"instructions":[
+						 ["ADD_U#_to_A"],
 						 ["ADD_B_to_R"],
 						 ["ADD_A_to_R"],
 						 ["ADD_mem_to_R", "??"],
@@ -755,7 +798,17 @@ high_lvl_instructions = {
 						["FAIL"],
 						],
 				"description":"Set error bit and halt"
-			}
+			},
+		"SLEEP":
+			{
+				"variants": ["R", "#0xHH", "@0xHH"],
+				"instructions":[
+						["SLEEP_R"],
+						["SLEEP_const"],
+						["SLEEP_mem"]
+						],
+				"description":"Pause clock for specified amount of ticks"
+			},
 		}
 high_lvl_instructions_ordered = sorted(high_lvl_instructions.keys())
 instructions_sorted = ["default"] + sorted(list(instructions.keys())[1:])

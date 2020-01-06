@@ -1,15 +1,24 @@
 ; Fibonacci
-byte    u_n     @0x1e
-byte    u_n_m1   @0x1f
-;byte    u_np2   @0x20
+byte    u_n     U1
+byte    u_n_m1   U2
+byte    n       U3
+byte    temp    @0x1e
 
 start:      MOV u_n_m1, #0x00
             MOV u_n, #0x01
-loop:       MOV A, u_n
-            MOV U0, #0x00
-            ADD U0, u_n
-            ADD U0, u_n_m1
-            MOV u_n, U0
-            MOV u_n_m1, A
+            DISP u_n
+loop:       
+            INC n
+            CMP n, #13 ; hard limit, because otherwise we would overflow
+            JMPGE end
+            MOV temp, u_n
+            MOV A, #0x00
+            ADD A, u_n
+            ADD A, u_n_m1
+            MOV u_n, A
+            MOV u_n_m1,temp
+            DISP u_n
+            SLEEP #0xFF
             JMP loop
+end:
             HALT
