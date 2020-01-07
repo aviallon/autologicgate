@@ -1,0 +1,25 @@
+; Multiply
+byte a #31
+byte b #7
+byte x B
+byte y U2
+byte z A
+
+start:
+        MOV x,a
+        MOV y,b
+        MOV z,#0x00
+loop:
+        CMP y ; compares to 0
+        JMPEQ end ; if y is zero, then we do not have to add "x" to "z" anymore -> multiplication is finished
+        JMPBIT #0x00, bit_is_one_do_add
+        JMP bit_is_zero_do_not_add
+bit_is_one_do_add:
+        ADD z,x
+bit_is_zero_do_not_add:
+        SHIFTL x
+        SHIFTR y
+        JMP loop
+end:
+        DISP z ; 217
+        HALT

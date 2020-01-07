@@ -2754,24 +2754,18 @@ c 412 1
     <comp lib="5" loc="(870,2350)" name="Hex Digit Display"/>
     <comp lib="5" loc="(940,1580)" name="7-Segment Display"/>
     <comp loc="(1050,320)" name="edge_detect"/>
-    <comp loc="(1630,1010)" name="ByteRegisterSafer">
-      <a name="label" val="B"/>
-    </comp>
+    <comp loc="(1630,1010)" name="ByteRegisterSafer"/>
     <comp loc="(1630,1290)" name="ByteRegisterSafer">
       <a name="label" val="U0"/>
     </comp>
-    <comp loc="(1630,730)" name="ByteRegisterSafer">
-      <a name="label" val="A"/>
-    </comp>
+    <comp loc="(1630,730)" name="ByteRegisterSafer"/>
     <comp loc="(1640,1510)" name="ByteRegisterSafer">
       <a name="label" val="U1"/>
     </comp>
     <comp loc="(1640,1730)" name="ByteRegisterSafer">
       <a name="label" val="U2"/>
     </comp>
-    <comp loc="(1770,350)" name="Counter8">
-      <a name="label" val="PC"/>
-    </comp>
+    <comp loc="(1770,350)" name="Counter8"/>
     <comp loc="(2310,1390)" name="ByteRegisterSafer">
       <a name="label" val="U3"/>
     </comp>

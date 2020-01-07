@@ -79,6 +79,24 @@ _div_next:
         JMP _div_loop
 _div_end:
         RET
+		
+MUL:
+        MOV B,param1 ; we do that because it is faster to add from B (removes unnecessary move operation)
+        ; MOV U2,param2 redundant, as param2 is already U2
+        MOV res,#0x00
+_mul_loop:
+        CMP param2 ; compares to 0
+        JMPEQ _mul_end ; if y is zero, then we do not have to add "x" to "z" anymore -> multiplication is finished
+        JMPBIT #0x00, _mul_bit_is_one_do_add
+        JMP _mul_bit_is_zero_do_not_add
+_mul_bit_is_one_do_add:
+        ADD res,B
+_mul_bit_is_zero_do_not_add:
+        SHIFTL B
+        SHIFTR param2
+        JMP _mul_loop
+_mul_end:
+        RET
 """
 	return syslib.split("\n")
 
@@ -104,13 +122,22 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 		for i,l in enumerate(lines):
 			ligne = l.strip("\t").strip(" ")
 			ligne = re.split(";.*", ligne)[0]
-			regex = "byte\s+("+identifier_regex+")\s+((?:[\#@](?:0x)?[0-9A-Fa-f]+)|U[0-3]|A|B)"
+			regex = "byte\s+("+identifier_regex+")\s+(.+)"
 			if temp := re.findall(regex, ligne):
 				if debug:
 					print(temp)
-				if temp[0][0] in variables:
+				identifier, value = temp[0][0], temp[0][1]
+				if identifier in variables:
 					raise Error(f"Redifinition of variable {temp[0][0]}")
-				variables[temp[0][0]] = temp[0][1]
+					
+				if re.findall("#|(\+?@)(0[xb])?[0-9A-Fa-f]+", value):
+					pass
+				elif value in registers:
+					pass
+				else:
+					raise Error(f"Illegal value '{value}' for a variable !")
+					
+				variables[identifier] = value
 				ligne = ""
 			jump = ""
 			if temp := re.findall("^("+identifier_regex+"):\s*", ligne):
@@ -134,6 +161,8 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 		print("Jumplist :", jumplist)
 		print("Variables : ", variables)
 	#print(lignes_labelisees)
+	
+	relative_addresses = []
 	
 	for k,l in enumerate(lignes_labelisees):
 		ligne = inst_split(l["data"])
@@ -185,7 +214,10 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 							print(f"\n\033[1m\033[36mHint:\033[0m Variable name \033[1m{cur_arg}\033[0m is perhaps mispelled : \033[1m{hint_var}\033[0m found\n")
 						raise UndefinedVar(f"{cur_arg} was not found and is not a jump label")
 
-					
+					relative_address = False
+					if cur_arg[0] == "+":
+						relative_address = True
+						cur_arg = cur_arg[1:]
 					base = 10
 					if cur_arg[1:2+1] == "0x":
 						base = 16
@@ -203,7 +235,7 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 							register_names += [reg]
 					elif cur_arg[0] == variant[i][0] and variant[i][0] == "@":
 						#print(args[i])
-						vals += [int(cur_arg[1:], base)]
+						vals += [(relative_address, int(cur_arg[1:], base))]
 						if debug:
 							print(f"Operand {i} is an address ({vals[-1]})")
 					elif cur_arg[0] == "#" and cur_arg[0] == variant[i][0]:
@@ -221,7 +253,7 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 						break
 				#print(vals)
 				if ok:
-					def generate_mcode(real_instruction, register_names, uregister_names, vals):
+					def generate_mcode(real_instruction, register_names, uregister_names, vals, mcode_len, relative_addresses):
 						mcode = []
 						for placeholder in placeholders:
 							real_instruction = real_instruction.replace("%b", str(placeholder), 1)
@@ -232,6 +264,7 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 													  
 						if verbose:
 							print("\tReal instruction :", real_instruction, end=' ')
+							print("("+hex(instructions_sorted.index(real_instruction))+")", end=' ')
 							for val in vals:
 								if type(val) == int:
 									val = hex(val)
@@ -247,6 +280,9 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 						for inst_data in vals:
 							if inst_data in jumplist:
 								mcode += [inst_data]
+							elif type(inst_data) == tuple:
+									relative_addresses += [len(mcode)+mcode_len]
+									mcode += [inst_data[1]]
 							else:
 								mcode += [hex(inst_data)[2:].zfill(8//4)]
 						return mcode
@@ -256,12 +292,12 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 						for t, real_instruction_dad in enumerate(parent):
 							real_instruction = real_instruction_dad[0]
 							if t == len(parent) - 1:
-								machine_code += generate_mcode(real_instruction, register_names, uregister_names, vals)
+								machine_code += generate_mcode(real_instruction, register_names, uregister_names, vals, len(machine_code), relative_addresses)
 							else:
-								machine_code += generate_mcode(real_instruction, [], [], [])
+								machine_code += generate_mcode(real_instruction, [], [], [], len(machine_code))
 					else:
 						real_instruction = parent[0]
-						machine_code += generate_mcode(real_instruction, register_names, uregister_names, vals)
+						machine_code += generate_mcode(real_instruction, register_names, uregister_names, vals, len(machine_code), relative_addresses)
 					
 					
 					if len(machine_code) > 2**address_bits:
@@ -275,9 +311,21 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 						print(f"\n\033[1m\033[36mHint:\033[0m Label \033[1m{not_found_arg}\033[0m is perhaps mispelled : \033[1m{jumpfound}\033[0m found in the jumplist\n")
 						
 				raise UndefinedInstructionVariant(f"Instruction {ligne[0]} can't be used with given args")
-					
+	
+	# We replace each relative address with an absolute one
+	mcode_len = len(machine_code)
+	rel_vars = {}
+	for rel_addr in relative_addresses:
+		new_addr = machine_code[rel_addr]+mcode_len
+		rel_vars[new_addr] = rel_addr
+		if verbose:
+			print(f"\nVariable at {rel_addr} got its address transformed from {machine_code[rel_addr]} to {new_addr}")
+		machine_code[rel_addr] = hex(new_addr)[2:].zfill(8//4)
 	if verbose:
 		print("\nJumplist (completed) :", jumplist)
+		print("\nRelative addresses :", [hex(i) for i in list(rel_vars.keys())])
+		
+	# We use our completed jumplist to replace each occurence of a label by its actual address
 	for i, m in enumerate(machine_code):
 		if m in jumplist.keys():
 			machine_code[i] = hex(jumplist[m])[2:].zfill(8//4)
