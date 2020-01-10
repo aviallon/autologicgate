@@ -97,6 +97,22 @@ _mul_bit_is_zero_do_not_add:
         JMP _mul_loop
 _mul_end:
         RET
+
+LOG2:
+        MOV A,param1
+        MOV res,#0
+        MOV B,#0
+_log2_loop:
+        INC B
+        SHIFTR A
+        CMP A
+        JMPEQ _log2_end
+        JMPBIT #0, _log2_no_cp_to_res
+        MOV res, B
+_log2_no_cp_to_res:
+        JMP _log2_loop
+_log2_end:
+        RET
 """
 	return syslib.split("\n")
 

@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Jan 10 03:42:54 2020
-
-@author: aviallon
-"""
-
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
 Created on Wed Jan  8 16:05:09 2020
 
 @author: aviallon
@@ -163,7 +155,7 @@ _op_{self.label_counter}:\tNOP
 				"return":{"nargs":1, "what":self.evaluate_return},
 				"function":{"nargs":2, "what":Expression.META_evaluate_declare_function(self,1)},
 				#";": {"nargs":0, "what":self.empty_little_stack}
-				"log": {"nargs":2, "what":self.evaluate_log2}
+				"log": {"nargs":1, "what":self.evaluate_log2}
 				}
 	
 		self.label_counter = 0
