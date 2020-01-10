@@ -28,8 +28,8 @@ micro_inst = {
 	  "loadInstruction":10,
 	  "loadMemAddr":11,
 	  "outMemAddr":12,
-	  "loadRet":13,
-	  "outRet":14,
+	  "incRet":13,
+	  "outRetAddr":14,
 	  "loadPC":15,
 	  "outA":16,
 	  "outB":17,
@@ -69,6 +69,7 @@ micro_inst = {
 	  "cond_C":51,
 	  "enableDEC":52,
 	  "loadSleep":53,
+	  "decRet":54,
 	  "error":63
 	  }
 
@@ -152,14 +153,17 @@ instructions = {
 				["clearMIcounter"]
 				],
 		"CALL_addr": [ # 0x1A
-				["outPC", "loadRAM"],
-				["outRAM", "loadMemAddr", "incPC"],
-				["outPC", "loadRet"],
+				["outRetAddr", "loadMemAddr"], # MemAddr pointe vers l'adresse de sauvegarde de la pile d'éxécution
+				["outPCp1", "storeRAM", "incRet"], # on a sauvegardé l'adresse
+				["outPC", "loadRAM"], # on charge la nouvelle adresse
+				["outRAM", "loadMemAddr"], # B stocke l'adresse de destination,
 				["loadPC", "cond_always", "outMemAddr"],
 				["clearMIcounter"]
 				],
 		"RET": [ # 0x1B
-				["outRet", "loadPC", "cond_always"],
+				["decRet"],
+				["outRetAddr", "loadRAM"], # on charge l'ancienne adresse
+				["outRAM", "loadPC", "cond_always"], # on remplace le PC et on dépile
 				["clearMIcounter"]
 				],
 		"XOR_A_B_to_A": [ # 0x1D

@@ -1,0 +1,22 @@
+byte	res	U3
+
+start:
+		CALL func1
+		DISP res
+		HALT
+
+func1:
+		MOV res, #1
+		CALL func2
+		RET
+
+func2:
+		ADD res,#1
+		LEDTGL
+		CALL func3
+		LEDTGL
+		RET
+
+func3:
+		INC A
+		RET
