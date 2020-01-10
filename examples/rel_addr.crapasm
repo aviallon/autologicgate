@@ -1,0 +1,5 @@
+; Rel addr
+start:
+        MOV +@0x01, #01
+        DISP +@0x01
+        HALT

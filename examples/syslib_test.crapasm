@@ -1,0 +1,12 @@
+; Trivial test
+include syslib
+start:
+        MOV param1, #127
+        MOV param2, #4
+        CALL DIV
+        MOV A, res
+        MOV param1, A
+        MOV param2, #4
+        CALL MUL
+        DISP res
+        HALT
