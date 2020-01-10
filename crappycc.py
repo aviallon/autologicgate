@@ -17,7 +17,7 @@ class Expression:
 		res = ""
 		if ops[0] != "res":
 			res += f"\tMOV res, {ops[0]}\n"
-		res += "\tJMP end\n"
+		res += "\tRET\n"
 		return res, []
 	
 	def evaluate_add(self,ops):
@@ -323,7 +323,7 @@ _op_{self.label_counter}:\tNOP
 		asm_prefix += """
 include syslib
 start:
-	JMP main
+	CALL main
 end:
 	DISP res
 	HALT
