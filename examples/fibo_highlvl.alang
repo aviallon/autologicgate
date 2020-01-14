@@ -1,0 +1,11 @@
+int u_n = 1;
+int u_n_m1 = 0;
+int i = 0;
+while {i != 13} {
+    i = i+1;
+    int temp = u_n;
+    u_n = u_n + u_n_m1;
+    u_n_m1 = temp;
+    print u_n;
+};
+return i;
