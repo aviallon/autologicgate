@@ -22,17 +22,28 @@ class Expression:
 	
 	def evaluate_add(self,ops):
 		res = ""
-		if ops[1] != "A":
-			res += f"\tMOV A,{ops[1]}\n"
-		res += f"\tADD A,{ops[0]}\n"
+		p1, p2 = ops[0], ops[1]
+		if ops[0][0] == "#":
+			if ops[1][0] == "#": # if both parameters are numbers, then add them at compile time !
+				return "", [f"#{int(ops[0][1:])+int(ops[1][1:])}"]
+			p1, p2 = p2, p1 # we can't have a const as first param to ADD
+		res += f"\tADD {p1},{p2}\n"
 			
-		return res, ["A"]
+		return res, [p1]
 
 	def evaluate_sub(self,ops):
 		res = ""
-		if ops[1] != "A":
-			res += f"\tMOV A,{ops[1]}\n"
-		res += f"\tSUB A,{ops[0]}\n"
+		p1, p2 = ops[0], ops[1]
+		if ops[0][0] == "#":
+			if ops[1][0] == "#": # if both parameters are numbers, then substract them at compile time !
+				return "", [f"#{int(ops[0][1:])-int(ops[1][1:])}"]
+		if ops[0][0] == "#" or ops[0][:2] == "+@":
+			res += f"\tMOV A,{ops[0]}\n"
+			p1 = "A"
+		if ops[0][0] == "#" or ops[0][:2] == "+@":
+			res += f"\tMOV B, {ops[1]}\n"
+			p2 = "B"
+		res += f"\tSUB {p1},{p2}\n"
 			
 		return res, ["A"]
 
@@ -61,6 +72,9 @@ class Expression:
 	def evaluate_equals(self,ops):
 		res = ""
 		p1,p2 = ops[0], ops[1]
+		if ops[0][0] == "#":
+			if ops[1][0] == "#": # if both parameters are numbers, then test them at compile time !
+				return f"\tMOV res,#{int(ops[0][1:])==int(ops[1][1:])}", ["res"]
 		if  ops[0][0] == "#" or ops[0][:2] == "+@":
 			if ops[1][0] != "#" and ops[1][:2] != "+@":
 				p2, p1 = p1, p2
@@ -82,6 +96,9 @@ _op_{self.label_counter}:\tNOP
 	def evaluate_not_equals(self,ops):
 		res = ""
 		p1,p2 = ops[0], ops[1]
+		if ops[0][0] == "#":
+			if ops[1][0] == "#": # if both parameters are numbers, then test them at compile time !
+				return f"\tMOV res,#{int(ops[0][1:])!=int(ops[1][1:])}", ["res"]
 		if ops[0][0] == "#" or ops[0][:2] == "+@":
 			if ops[1][0] != "#" and ops[1][:2] != "+@":
 				p2, p1 = p1, p2
@@ -93,7 +110,7 @@ _op_{self.label_counter}:\tNOP
 		res += f"""\
 	CMP {p1},{p2}
 	MOV res,#0
-	JNZ _op_{self.label_counter}
+	JZ _op_{self.label_counter}
 	MOV res,#1
 _op_{self.label_counter}:\tNOP
 """
@@ -101,10 +118,49 @@ _op_{self.label_counter}:\tNOP
 		return res, ["res"]
 
 	def evaluate_strictly_superior(self,ops):
-		res = f"""\
-	CMP {ops[0]},{ops[1]}
+		if ops[0][0] == "#":
+			if ops[1][0] == "#":  # if both parameters are numbers, then test them at compile time !
+				return f"\tMOV res,#{int(ops[0][1:]) > int(ops[1][1:])}", ["res"]
+
+		p1, p2 = ops[0], ops[1]
+		res = ""
+		if ops[0][0] == "#" or ops[0][:2] == "+@":
+			if ops[1][0] != "#" and ops[1][:2] != "+@":
+				p2, p1 = p1, p2
+			else:
+				p1 = "res"
+				res += f"""\
+			MOV res, {ops[0]}
+		"""
+		res += f"""\
+	CMP {p1},{p2}
 	MOV res,#0
-	JMPGT _op_{self.label_counter}
+	JG _op_{self.label_counter}
+	MOV res,#1
+_op_{self.label_counter}:\tNOP
+"""
+		self.label_counter += 1
+		return res, ["res"]
+
+	def evaluate_strictly_inferior(self, ops):
+		if ops[0][0] == "#":
+			if ops[1][0] == "#":  # if both parameters are numbers, then test them at compile time !
+				return f"\tMOV res,#{int(ops[0][1:]) < int(ops[1][1:])}", ["res"]
+
+		p1, p2 = ops[0], ops[1]
+		res = ""
+		if ops[0][0] == "#" or ops[0][:2] == "+@":
+			if ops[1][0] != "#" and ops[1][:2] != "+@":
+				p2, p1 = p1, p2
+			else:
+				p1 = "res"
+				res += f"""\
+			MOV res, {ops[0]}
+		"""
+		res += f"""\
+	CMP {p1},{p2}
+	MOV res,#0
+	JL _op_{self.label_counter}
 	MOV res,#1
 _op_{self.label_counter}:\tNOP
 """
@@ -158,6 +214,11 @@ _else_{self.depth}_{self.label_counter}:
 	INC {ops[0]}
 """, [ops[0]]
 
+	def evaluate_decrement(self, ops):
+		return f"""\
+	DEC {ops[0]}
+""", [ops[0]]
+
 	def empty_little_stack(self, ops):
 		return "", []
 	
@@ -206,9 +267,9 @@ _else_{self.depth}_{self.label_counter}:
 
 	def __init__(self, expr, variables={}, depth=0, debug=False):
 		if type(expr) == str:
-			expr = re.sub("/\*.*?\*/", "", expr)
+			expr = re.sub("/\*[^\*]*?\*/", "", expr)
 			expr = re.sub("//.*(\n|$)", "\n", expr)
-			self.words = list(filter(None, re.split("([\{\}\(\)/\*-]|\++|[0-9]+|[a-zA-Z_][a-zA-Z0-9_]*|;)|\s+", expr)))
+			self.words = list(filter(None, re.split("([\{\}\(\)/\*]|\++|-+|[0-9]+|[a-zA-Z_][a-zA-Z0-9_]*|;)|\s+", expr)))
 		elif type(expr) == list:
 			self.words = expr[:]
 		else:
@@ -222,15 +283,16 @@ _else_{self.depth}_{self.label_counter}:
 		self.var_size = sum(x for x in variables.values())
 		self.operators = {
 				"+": {"prec":20, "assoc":"left", "nargs":2, "type":"infix", "what":self.evaluate_add},
-				"-": {"prec":20, "assoc":"left", "nargs":2, "type":"infix", "what":self.evaluate_return},
+				"-": {"prec":20, "assoc":"left", "nargs":2, "type":"infix", "what":self.evaluate_sub},
 				"*": {"prec":30, "assoc":"left", "nargs":2, "type":"infix", "what":self.evaluate_mul},
 				"/": {"prec":30, "assoc":"left", "nargs":2, "type":"infix", "what":self.evaluate_div},
 				"=": {"prec":5, "assoc":"left", "nargs":2, "type":"infix", "what":self.evaluate_asign},
-				#"¤": {"prec":1, "assoc":"left", "nargs":4, "what":lambda x:print(x)},
 				"==":{"prec":10, "assoc":"left", "nargs":2, "type":"infix", "what":self.evaluate_equals},
 				"!=":{"prec":10, "assoc":"left", "nargs":2, "type":"infix", "what":self.evaluate_not_equals},
 				">":{"prec":10, "assoc":"left", "nargs":2, "type":"infix", "what":self.evaluate_strictly_superior},
+				"<": {"prec": 10, "assoc": "left", "nargs": 2, "type": "infix", "what": self.evaluate_strictly_inferior},
 				"++": {"prec": 10, "assoc":"left", "nargs":1, "type":"postfix","what":self.evaluate_increment},
+				"--": {"prec": 10, "assoc": "left", "nargs": 1, "type": "postfix", "what": self.evaluate_decrement},
 				"(": {"prec":1000, "assoc":"left", "nargs":0, "type":"prefix", "what":lambda x:x},
 				}
 		self.keywords = {
@@ -566,5 +628,5 @@ if __name__ == "__main__":
 	else:
 		with open(f"{basename}.crapasm", "w") as intermediate_file:
 			intermediate_file.write(asm)
-		os.system(f"python crappyasm.py -v -o {output}.ram {basename}.crapasm")
+		os.system(f"python crappyasm.py {'-v' if args.verbose else ''} -o {output}.ram {basename}.crapasm")
 		print(f"RAM written to file {output}.ram")

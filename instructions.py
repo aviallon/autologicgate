@@ -196,6 +196,14 @@ instructions = {
 				["outALU", "storeRAM"],
 				["clearMIcounter"]
 				],
+		"DEC_mem": [ #
+				["outPC", "loadRAM"],
+				["outRAM", "loadMemAddr", "incPC"],
+				["outMemAddr", "loadRAM"],
+				["outRAM", "enableDEC", "loadALU"],
+				["outALU", "storeRAM"],
+				["clearMIcounter"]
+				],
 		"NOP": [ # 0x29
 				["clearMIcounter"]
 				],
@@ -403,6 +411,11 @@ templates = {
 				],
 		"INC_%RB": [ 
 				["out%RB", "enableInc", "loadALU"],
+				["outALU", "load%RB"],
+				["clearMIcounter"]
+				],
+		"DEC_%RB": [
+				["out%RB", "enableDEC", "loadALU"],
 				["outALU", "load%RB"],
 				["clearMIcounter"]
 				],
@@ -657,6 +670,15 @@ high_lvl_instructions = {
 						 ["INC_mem", "??"]
 						 ],
 				"description":"Increment register or value at memory address"
+			 },
+		"DEC":
+			{
+				"variants": ["R", "@0xHH"],
+				"instructions":[
+						 ["DEC_R"],
+						 ["DEC_mem", "??"]
+						 ],
+				"description":"Decrement register or value at memory address"
 			 },
 		"SHIFTL":
 			{

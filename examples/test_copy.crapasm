@@ -1,6 +1,0 @@
-start:
-        MOV +@0, #3
-        MOV +@1, +@0
-        ;CLR +@1
-        DISP +@1
-        HALT

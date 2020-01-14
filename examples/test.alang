@@ -1,0 +1,10 @@
+/*int i = 20;
+while {i > 10} {
+    i--;
+    print i;
+};
+return i;*/
+int a = 0;
+a++;
+a--;
+return 2-1+a;
