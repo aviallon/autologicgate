@@ -288,6 +288,12 @@ templates = {
 				["outRAM", "loadPC", "cond_selected_bit", "%dd"],
 				["clearMIcounter"],
 				],
+		"JMP_not_sel_bit_%d": [ 
+				["outPC", "loadRAM"],
+				["incPC"],
+				["outRAM", "loadPC", "cond_selected_bit", "invert_cond", "%dd"],
+				["clearMIcounter"],
+				],
 		"LOAD_ptr_to_%RB": [ 
 				["outPC", "loadRAM"],
 				["outRAM", "loadMemAddr", "incPC"],
@@ -770,6 +776,14 @@ high_lvl_instructions = {
 						 ["JMP_sel_bit_%b", "??"],
 						 ],
 				"description":"Go to specified address if selected bit of comparison register is 1."
+			 },
+		"JMPNBIT":
+			{
+				"variants": ["%b, #0xHH"],
+				"instructions":[
+						 ["JMP_not_sel_bit_%b", "??"],
+						 ],
+				"description":"Go to specified address if selected bit of comparison register is 0."
 			 },
 		"CALL":
 			{
