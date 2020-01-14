@@ -67,12 +67,12 @@ DIV:
         MOV U1,B
         
         CMP param2,#0
-        JMPNEQ _div_loop
+        JNZ _div_loop
         ABRT
 _div_loop:
         SUB A,U1 ; we substract b to a' once
         CMP A,#0 ; if the result is superior to 0, then we increment the quotient, and retest
-        JMPGT _div_next
+        JG _div_next
         JMP _div_end
 _div_next:
         INC res
@@ -86,8 +86,8 @@ MUL:
         MOV res,#0x00
 _mul_loop:
         CMP param2 ; compares to 0
-        JMPEQ _mul_end ; if y is zero, then we do not have to add "x" to "z" anymore -> multiplication is finished
-        JMPBIT #0x00, _mul_bit_is_one_do_add
+        JZ _mul_end ; if y is zero, then we do not have to add "x" to "z" anymore -> multiplication is finished
+        JBIT #0x00, _mul_bit_is_one_do_add
         JMP _mul_bit_is_zero_do_not_add
 _mul_bit_is_one_do_add:
         ADD res,B
@@ -106,8 +106,8 @@ _log2_loop:
         INC B
         SHIFTR A
         CMP A
-        JMPEQ _log2_end
-        JMPBIT #0, _log2_no_cp_to_res
+        JZ _log2_end
+        JBIT #0, _log2_no_cp_to_res
         MOV res, B
 _log2_no_cp_to_res:
         JMP _log2_loop

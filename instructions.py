@@ -721,7 +721,7 @@ high_lvl_instructions = {
 						 ],
 				"description":"Go to address value at memory address."
 			 },
-		"JMPEQ":
+		"JZ":
 			{
 				"variants": ["#0xHH"],
 				"instructions":[
@@ -729,7 +729,7 @@ high_lvl_instructions = {
 						 ],
 				"description":"Go to specified address if comparison register is zero."
 			 },
-		"JMPNEQ":
+		"JNZ":
 			{
 				"variants": ["#0xHH"],
 				"instructions":[
@@ -737,7 +737,7 @@ high_lvl_instructions = {
 						 ],
 				"description":"Go to specified address if comparison register is NOT zero."
 			 },
-		"JMPLT":
+		"JL":
 			{
 				"variants": ["#0xHH"],
 				"instructions":[
@@ -745,7 +745,7 @@ high_lvl_instructions = {
 						 ],
 				"description":"Go to specified address if comparison register is strictly negative."
 			 },
-		"JMPLE":
+		"JLE":
 			{
 				"variants": ["#0xHH"],
 				"instructions":[
@@ -753,7 +753,7 @@ high_lvl_instructions = {
 						 ],
 				"description":"Go to specified address if comparison register is negative or zero."
 			 },
-		"JMPGT":
+		"JG":
 			{
 				"variants": ["#0xHH"],
 				"instructions":[
@@ -761,7 +761,7 @@ high_lvl_instructions = {
 						 ],
 				"description":"Go to specified address if comparison register is strictly positive."
 			 },
-		"JMPGE":
+		"JGE":
 			{
 				"variants": ["#0xHH"],
 				"instructions":[
@@ -769,7 +769,7 @@ high_lvl_instructions = {
 						 ],
 				"description":"Go to specified address if comparison register is positive (or zero)."
 			 },
-		"JMPBIT":
+		"JBIT":
 			{
 				"variants": ["%b, #0xHH"],
 				"instructions":[
@@ -777,7 +777,7 @@ high_lvl_instructions = {
 						 ],
 				"description":"Go to specified address if selected bit of comparison register is 1."
 			 },
-		"JMPNBIT":
+		"JNBIT":
 			{
 				"variants": ["%b, #0xHH"],
 				"instructions":[

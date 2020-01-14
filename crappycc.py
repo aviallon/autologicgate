@@ -72,7 +72,7 @@ class Expression:
 		res += f"""\
 	CMP {p1},{p2}
 	MOV res,#0
-	JMPNEQ _op_{self.label_counter}
+	JNZ _op_{self.label_counter}
 	MOV res,#1
 _op_{self.label_counter}:\tNOP
 """
@@ -93,7 +93,7 @@ _op_{self.label_counter}:\tNOP
 		res += f"""\
 	CMP {p1},{p2}
 	MOV res,#0
-	JMPEQ _op_{self.label_counter}
+	JNZ _op_{self.label_counter}
 	MOV res,#1
 _op_{self.label_counter}:\tNOP
 """
@@ -141,7 +141,7 @@ _while_{self.depth}_{self.label_counter}: ; while cond calc
 		res += ops[0].asm
 		res += f"""\
 	CMP {cmp_reg}
-	JMPEQ _else_{self.depth}_{self.label_counter}
+	JZ _else_{self.depth}_{self.label_counter}
 ; while body
 """
 		res += ops[1].asm
