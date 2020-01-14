@@ -38,62 +38,97 @@ class Expression:
 
 	def evaluate_mul(self,ops):
 		return f"""\
-\tMOV param1,{ops[1]}
-\tMOV param2,{ops[0]}
-\tCALL MUL
+	MOV param1,{ops[1]}
+	MOV param2,{ops[0]}
+	CALL MUL
 """, ["res"]
 
 	def evaluate_div(self,ops):
 		return f"""\
-\tMOV param1,{ops[1]}
-\tMOV param2,{ops[0]}
-\tCALL DIV
+	MOV param1,{ops[1]}
+	MOV param2,{ops[0]}
+	CALL DIV
 """, ["res"]
 
 	def evaluate_asign(self,ops):
 		if not(re.match("^(\+@(?:0[xb])?[0-9]+)|A|B|U[0-3]|res|param[1-2]$", str(ops[0]))):
 			raise CompilerError(f"{ops[0]} is not addressable")
 		return f"""\
-\tMOV {ops[0]},{ops[1]}
+	MOV {ops[0]},{ops[1]}
 """, [f"{ops[0]}"]
 			
 
 	def evaluate_equals(self,ops):
-		return f"""\
-\tCMP {ops[0]},{ops[1]}
-\tMOV res,#0
-\tJMPNEQ _op_{self.label_counter}
-\tMOV res,#1
+		res = ""
+		p1,p2 = ops[0], ops[1]
+		if  ops[0][0] == "#" or ops[0][:2] == "+@":
+			if ops[1][0] != "#" and ops[1][:2] != "+@":
+				p2, p1 = p1, p2
+			else:
+				p1 = "res"
+				res += f"""\
+	MOV res, {ops[0]}
+"""
+		res += f"""\
+	CMP {p1},{p2}
+	MOV res,#0
+	JMPNEQ _op_{self.label_counter}
+	MOV res,#1
 _op_{self.label_counter}:\tNOP
-""", ["res"]
+"""
+		self.label_counter += 1
+		return res, ["res"]
 
 	def evaluate_not_equals(self,ops):
-		return f"""\
-\tCMP {ops[0]},{ops[1]}
-\tMOV res,#0
-\tJMPEQ _op_{self.label_counter}
-\tMOV res,#1
+		res = ""
+		p1,p2 = ops[0], ops[1]
+		if ops[0][0] == "#" or ops[0][:2] == "+@":
+			if ops[1][0] != "#" and ops[1][:2] != "+@":
+				p2, p1 = p1, p2
+			else:
+				p1 = "res"
+				res += f"""\
+	MOV res, {ops[0]}
+"""
+		res += f"""\
+	CMP {p1},{p2}
+	MOV res,#0
+	JMPEQ _op_{self.label_counter}
+	MOV res,#1
 _op_{self.label_counter}:\tNOP
-""", ["res"]
+"""
+		self.label_counter += 1
+		return res, ["res"]
 
 	def evaluate_strictly_superior(self,ops):
-		return f"""\
-\tCMP {ops[0]},{ops[1]}
-\tMOV res,#0
-\tJMPGT _op_{self.label_counter}
-\tMOV res,#1
+		res = f"""\
+	CMP {ops[0]},{ops[1]}
+	MOV res,#0
+	JMPGT _op_{self.label_counter}
+	MOV res,#1
 _op_{self.label_counter}:\tNOP
-""", ["res"]
+"""
+		self.label_counter += 1
+		return res, ["res"]
 
 	def evaluate_if(self,ops):
-		return f"""\
-\tCMP {ops[0]}
-\tJMPEQ {ops[1]}
-""", []
+		if not(type(ops[1]) == Expression):
+			raise CompilerError(f"Expected {ops[1]} to be an Expression")
+		res = ""
+		res += f"""\
+	CMP {ops[0]}
+	JMPEQ _else_{self.depth}_{self.label_counter}
+"""
+		res += ops[1].asm
+		res += f"""\
+_else_{self.depth}_{self.label_counter}:
+	NOP
+"""
+		return res, []
 
 	def evaluate_increment(self, ops):
 		return f"""\
-\tINC {ops[0]}
+	INC {ops[0]}
 """, [ops[0]]
 
 	def empty_little_stack(self, ops):
@@ -101,18 +136,19 @@ _op_{self.label_counter}:\tNOP
 	
 	def evaluate_log2(self, ops):
 		return f"""\
-\tMOV param1,{ops[0]}
-\tCALL LOG2
+	MOV param1,{ops[0]}
+	CALL LOG2
 """, ["res"]
 
 	def META_evaluate_declare_var(instance, size):
 		def evaluate_declare_var(ops):
 			if not(re.match("^[a-zA-Z_][a-zA-Z0-9_]*$", ops[0])):
 				raise CompilerError(f"{ops[0]} is not a valid identifier")
+			realname = f"_{instance.depth}_{ops[0]}"
 			print("Instance vars : ", instance.variables)
-			if ops[0] in instance.variables:
-				raise CompilerError(f"redefinition of {ops[0]} not allowed !")
-			instance.variables[ops[0]] = instance.var_size
+			if realname in instance.variables:
+				raise CompilerError(f"redefinition of {realname} not allowed !")
+			instance.variables[realname] = instance.var_size
 			instance.var_size += size
 			print("Instance vars after : ", instance.variables)
 			return f"""""", [f"+@{instance.var_size-size}"]
@@ -130,10 +166,18 @@ _op_{self.label_counter}:\tNOP
 			return f"", []
 		return evaluate_declare_function
 
-	def __init__(self, expr, variables):
-		self.words = list(filter(None, re.split("([\(\)/\*-]|\++|[0-9]+|[a-zA-Z_][a-zA-Z0-9_]*|;)|\s+", expr)))
+	def __init__(self, expr, variables={}, depth=0, debug=False):
+		if type(expr) == str:
+			self.words = list(filter(None, re.split("([\{\}\(\)/\*-]|\++|[0-9]+|[a-zA-Z_][a-zA-Z0-9_]*|;)|\s+", expr)))
+		elif type(expr) == list:
+			self.words = expr[:]
+		else:
+			raise CompilerError("Expected a list or a string")
 		self.variables = variables
 		self.functions = {}
+		self.depth = depth
+		self.asm = ""
+		self.debug = debug
 		#print(self.words)
 		self.var_size = sum(x for x in variables.values())
 		self.operators = {
@@ -150,12 +194,12 @@ _op_{self.label_counter}:\tNOP
 				"(": {"prec":1000, "assoc":"left", "nargs":0, "type":"prefix", "what":lambda x:x},
 				}
 		self.keywords = {
-				"if":{"nargs":2, "what":self.evaluate_if},
-				"int":{"nargs":1, "what":Expression.META_evaluate_declare_var(self,1)},
-				"return":{"nargs":1, "what":self.evaluate_return},
-				"function":{"nargs":2, "what":Expression.META_evaluate_declare_function(self,1)},
+				"if":{"prec":-1,"nargs":2, "what":self.evaluate_if},
+				"int":{"prec":0,"nargs":1, "what":Expression.META_evaluate_declare_var(self,1), "special_state":"want_new_identifier"},
+				"return":{"prec":-1,"nargs":1, "what":self.evaluate_return},
+				"function":{"prec":0,"nargs":2, "what":Expression.META_evaluate_declare_function(self,1)},
 				#";": {"nargs":0, "what":self.empty_little_stack}
-				"log": {"nargs":1, "what":self.evaluate_log2}
+				"log": {"prec":0,"nargs":1, "what":self.evaluate_log2}
 				}
 	
 		self.label_counter = 0
@@ -182,24 +226,50 @@ _op_{self.label_counter}:\tNOP
 					cur += 1
 					if cur == len(self.words):
 						break
-						
-			if state == "want_operand":
+					
+			if state == "want_new_identifier":
+				if cur >= len(self.words):
+					raise CompilerError(f"Expected an operand...")
+				w = self.words[cur]
+				print("want_new_identifier:", w)
+				if re.match("^[a-zA-Z_][a-zA-Z0-9_]*$", w):
+					identifier_name = f"declare(_{self.depth}_{w})"
+					stack += [identifier_name]
+					state = "have_operand"
+			elif state == "want_operand":
 				if cur >= len(self.words):
 					raise CompilerError(f"Expected an operand...")
 				w = self.words[cur]
 				print("want_operand:", w, "type:", self.operators.get(w)["type"] if w in self.operators else "not an op")
 				print("DEBUT:", w, stack, opstack)
 				if (self.operators.get(w)["type"] == "prefix") if w in self.operators else False:
-						opstack += [("prefix", w)]
+					opstack += [("prefix", w)]
 				elif w in self.keywords:
 					opstack += [("prefix", w)]
-					
+					print("we have a keyword here !")
+					print(self.keywords[w])
+					if "special_state" in self.keywords[w]:
+						print(f"Set status to {self.keywords[w]['special_state']}")
+						state = self.keywords[w]['special_state']
 				elif re.match("^[0-9]+$", w) or re.match("^[a-zA-Z_][a-zA-Z0-9_]*$", w):
 					stack += [w]
 					state = "have_operand"
+				elif w == "{":
+					cur_debut = cur
+					sub_expr = ""
+					depth = 1
+					while depth > 0:
+						cur += 1
+						if self.words[cur] == "}":
+							depth -= 1
+						elif self.words[cur] == "{":
+							depth += 1
+					sub_expr = self.words[cur_debut+1:cur]
+					stack += [Expression(sub_expr, {}, depth+1)]
+					state = "want_operand"
 				else:
 					raise CompilerError(f"Expected an operand after '{opstack[-1]}', got '{w}'")
-			else:
+			else: # state == "have_operand"
 				if cur >= len(self.words):
 					break
 				w = self.words[cur]
@@ -230,18 +300,45 @@ _op_{self.label_counter}:\tNOP
 						else:
 							raise CompilerError("Too much closing parenthesis...")
 					state = "want_operand"
-				elif (self.operators.get(w)["type"] == "infix") if w in self.operators else False:
+				elif w == "{":
+					cur_debut = cur
+					sub_expr = ""
+					depth = 1
+					while depth > 0:
+						cur += 1
+						if self.words[cur] == "}":
+							depth -= 1
+						elif self.words[cur] == "{":
+							depth += 1
+					sub_expr = self.words[cur_debut+1:cur]
+					stack += [Expression(sub_expr, {}, depth+1)]
+					state = "want_operand"
+				elif (self.operators.get(w)["type"] == "infix") if w in self.operators else (self.operators[w]["type"] == "infix") if w in self.keywords else False:
 					print("Encountered infix operator")
 					while len(opstack):
 						print("opstack...")
 						optype, op = opstack[-1]
+						op_prec, op_assoc, w_type, w_prec = None, None, None, None
+						if op in self.operators:
+							op_prec = self.operators[op]["prec"]
+							op_assoc = self.operators[op]["assoc"]
+						else:
+							op_prec = self.keywords[op]["prec"]
+							op_assoc = "left"
+						if w in self.operators:
+							w_type = self.operators[w]["type"]
+							w_prec = self.operators[w]["prec"]
+						else:
+							w_type = "prefix"
+							w_prec = self.keywords[w]["prec"]
+							
 						if opstack[-1] in self.keywords:
 							stack += [op]
 							opstack.pop()
 						elif (
-								optype == "prefix" or
-								(operators[op]["prec"] > operators[w]["prec"] and operators[w]["type"] == "prefix") or
-								(operators[op]["prec"] == operators[w]["prec"] and operators[op]["assoc"] == "left")
+								(optype == "prefix" and op_prec >= 0) or
+								(op_prec > w_prec and w_type == "infix") or
+								(op_prec == w_prec and op_assoc == "left")
 							) and op != "(":
 							stack += [op]
 							opstack.pop()
@@ -287,40 +384,86 @@ _op_{self.label_counter}:\tNOP
 		return self.tree
 	
 	def tree_to_code(self):
+		import time
 		print("BEGIN TREE TO CODE")
-		operators = self.operators
 		stack = self.stack[::-1]
 		eval_stack = []
 		asm = ""
 		while len(stack):
-			#print(stack, eval_stack)
+			print(stack, eval_stack)
 			op = stack.pop()
-			#print(op)
-			if op in self.keywords:
+			ok = False
+			print(op)
+			if type(op) == Expression:
+				print(self.variables)
+				op.variables = self.variables
+				op.var_size = self.var_size
+				op.parse()
+				op.tree_to_code()
+				self.variables = op.variables
+				self.var_size = op.var_size
+				eval_stack += [op]
+				ok = True
+			elif op in self.keywords:
 				operandes = [eval_stack.pop() for i in range(self.keywords[op]["nargs"])][::-1]
 				res, stackret = self.keywords[op]["what"](operandes)
 				asm += res
 				eval_stack += stackret
-			elif op in operators:
-				operandes = [eval_stack.pop() for i in range(operators[op]["nargs"])][::-1]
-				res, stackret = operators[op]["what"](operandes)
+				ok = True
+				print(f"KW : res : {res}, stackret = {stackret}")
+			elif op in self.operators:
+				operandes = [eval_stack.pop() for i in range(self.operators[op]["nargs"])][::-1]
+				res, stackret = self.operators[op]["what"](operandes)
 				asm += res
 				eval_stack += stackret
-			elif op in self.variables:
-				eval_stack += [f"+@{self.variables[op]}"]
-			elif re.match("^[0-9]+$", op):
-				eval_stack += [f"#{op}"]
-			elif op not in ["A", "B"]:
-				eval_stack += [op]
+				ok = True
+				print(f"OP : res : {res}, stackret = {stackret}")
+			elif "declare(" in op:
+				varname = op.split("(")[1].split(")")[0]
+				varbasename = varname.split("_",2)[2]
+				if varname in self.variables:
+					raise CompilerError(f"Variable {varbasename} already defined in this context !")
+					
+				eval_stack += [varbasename]
+				ok = True
+				print(f"DEC: self.variables : {self.variables}")
 			else:
-				raise CompilerError(f"'{op}' is a reserved symbol !")
-		#print(stack, eval_stack)
+				#ok = False
+				for i in range(self.depth+1):
+					temp = f'_{self.depth-i}_{op}'
+					#print("temp : ",temp, "self.variables=",self.variables)
+					if temp in self.variables:
+						eval_stack += [f"+@{self.variables[temp]}"]
+						ok = True
+						break
+				
+				
+			if not(ok):
+				if re.match("^[0-9]+$", op):
+					eval_stack += [f"#{op}"]
+				elif op not in ["A", "B"]:
+					eval_stack += [op]
+				else:
+					raise CompilerError(f"'{op}' is a reserved symbol !")
+					
+			if self.debug:
+				time.sleep(0.5)
+			print(f"({self.depth}) {'****'*self.depth} ===============")
+			
+		self.asm = asm
+		return self.asm
 		
+	def assembly(self):
+		if self.asm == "":
+			self.tree_to_code()
+			
+		asm_suffix = ""
 		asm_prefix = ""
-		for var in self.variables:
-			asm_prefix += f"byte {var} +@{self.variables[var]}\n"
-		
-		asm_prefix += """
+		if self.depth == 0:
+			for var in self.variables:
+				asm_prefix += f"byte {var} +@{self.variables[var]}\n"
+			
+			asm_prefix += """
 include syslib
 start:
 	CALL main
@@ -329,84 +472,17 @@ end:
 	HALT
 main:
 """
-		asm_suffix = """
+			asm_suffix = """
 	JMP end
 """
-		return asm_prefix + asm + asm_suffix
+		return asm_prefix + self.asm + asm_suffix
 		
 
 
-#class Context:
-#	def __str__(self):
-#		s = f"Context (depth={self.depth}) :\n=============\n"
-#		for l in self.lines:
-#			s += l + "\n"
-#		return s
-#	
-#	def __repr__(self):
-#		lines = "\n".join(self.lines)
-#		s = f"Context(depth={self.depth}, code=\"\"\"\\\n\
-#{lines}\n\
-#\"\"\")"
-#		return s
-#	
-#	def __init__(self, code, depth=0):
-#		parser = re.compile("\n+|;")
-#		self.lines = []
-#		if type(code) == str:
-#			self.lines = list(filter(lambda x: not(re.match("^\s*$", x)), re.split(parser, code)))
-#		else:
-#			self.lines = code
-#			
-#		self.depth = depth
-#			
-#		print(self.__str__())
-#		self.contexts = []
-#		level = 0
-#		line_begin = 0
-#		car_begin = 0
-#		for i,line in enumerate(self.lines):
-#			#print(f"Line ({i}): ", line)
-#			if "}" in line:
-#				level -= 1
-#				car_end = line.index("}")
-#				line_end = i
-#				if level == 0:
-#					content = ""
-#					if line_end == line_begin:
-#						content = [self.lines[line_begin][car_begin+1:car_end]]
-#					else:
-#						#print(line_begin, line_end, car_begin, car_end)
-#						content = [self.lines[line_begin][car_begin+1:]]+self.lines[line_begin+1:line_end]+[self.lines[line_end][:car_end]]
-#					#print(content)
-#					self.contexts += [{
-#							"begin": (line_begin, car_begin),
-#							"end": (i, line.index("}")),
-#							"content": Context(content, depth+1)
-#							}]
-#				#print(f"Found '}}' at ({i}:{car_end}) - level = {level}")
-#					
-#			if "{" in line:
-#				what_index = line.index("{")
-#				#print(f"Found '{{' at ({i}:{what_index}) - level = {level}")
-#				if level == 0:
-#					#print("HELP : ", car_begin, len(line))
-#					if car_begin == len(line)-1:
-#						line_begin = i+1
-#						car_begin = 0
-#					else:
-#						line_begin = i
-#						car_begin = what_index
-#				level += 1
-#				
-#				
-#		for i, line in enumerate(self.lines):
-#			lineparse = re.compile("\s+")
-
-def crapcompile(string):
-	expr = Expression(string, variables={})
+def crapcompile(string, debug=False):
+	expr = Expression(string, variables={}, debug=debug)
 	expr.parse()
-	asm = expr.tree_to_code()
+	asm = expr.assembly()
 	print("ASSEMBLY\n==============")
 	print(asm)
 	return asm
@@ -418,7 +494,7 @@ if __name__ == "__main__":
 	import sys
 	parser = argparse.ArgumentParser()
 	parser.add_argument("-d", "--debug", dest="debug", action="store_true", help="enable debug mode, activates verbose")
-	parser.add_argument("-v", "--verbose", dest="verbose", action="store_true", help="enable debug mode")
+	parser.add_argument("-v", "--verbose", dest="verbose", action="store_true", help="enable verbose mode")
 	parser.add_argument("-S", "--assembly", dest="assembly", action="store_true", help="outputs assembly only")
 	parser.add_argument('-o', '--output', dest="output", metavar="OUTPUT_FILE", help="output file", default="")
 	parser.add_argument(metavar="INPUT_FILE", dest="input", help="input file", default="prog.crapasm")
@@ -429,20 +505,24 @@ if __name__ == "__main__":
 		basename = "a"
 	output = args.output
 	if args.output == "":
-		output = basename+".crapasm"
+		output = basename
 	
-	with open(output, "w") as compile_file:
-		code = ""
-		asm = ""
-		input_file = sys.stdin
-		if args.input != "-":
-			input_file = open(args.input, "r")
-		code = input_file.read()
-		if input_file is not sys.stdin:
-			input_file.close()
-		asm = crapcompile(code)
-		if args.assembly:
+	
+	code = ""
+	asm = ""
+	input_file = sys.stdin
+	if args.input != "-":
+		input_file = open(args.input, "r")
+	code = input_file.read()
+	if input_file is not sys.stdin:
+		input_file.close()
+	asm = crapcompile(code, args.debug)
+	if args.assembly:
+		with open(f"{output}.crapasm", "w") as compile_file:
 			compile_file.write(asm)
-		else:
-			with open(f"{basename}.crapasm", "w") as intermediate_file:
-				intermediate_file.write(asm)
+			print(f"Assembly code written to file {output}.crapasm")
+	else:
+		with open(f"{basename}.crapasm", "w") as intermediate_file:
+			intermediate_file.write(asm)
+		os.system(f"python crappyasm.py -v -o {output}.ram {basename}.crapasm")
+		print(f"RAM written to file {output}.ram")
