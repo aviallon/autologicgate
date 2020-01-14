@@ -124,6 +124,33 @@ _op_{self.label_counter}:\tNOP
 _else_{self.depth}_{self.label_counter}:
 	NOP
 """
+		self.label_counter += 1
+		return res, []
+	
+	def evaluate_while(self,ops):
+		if not(type(ops[1]) == Expression):
+			raise CompilerError(f"Expected {ops[1]} to be an Expression")
+		if not(type(ops[0]) == Expression):
+			raise CompilerError(f"Expected {ops[0]} to be an Expression")
+		#cmp_eval = ops[0].asm
+		cmp_reg = "res"
+		res = ""
+		res += f"""\
+_while_{self.depth}_{self.label_counter}: ; while cond calc
+"""
+		res += ops[0].asm
+		res += f"""\
+	CMP {cmp_reg}
+	JMPEQ _else_{self.depth}_{self.label_counter}
+; while body
+"""
+		res += ops[1].asm
+		res += f"""\
+	JMP _while_{self.depth}_{self.label_counter}
+_else_{self.depth}_{self.label_counter}:
+	NOP
+"""
+		self.label_counter += 1
 		return res, []
 
 	def evaluate_increment(self, ops):
@@ -139,6 +166,17 @@ _else_{self.depth}_{self.label_counter}:
 	MOV param1,{ops[0]}
 	CALL LOG2
 """, ["res"]
+
+	def evaluate_print(self, ops):
+		res = ""
+		p1 = ops[0]
+		if p1[0] == "#":
+			res += f"""\
+	MOV res, {ops[0]}
+"""
+			p1 = "res"
+		res += f"\tDISP {p1}\n"
+		return res, []
 
 	def META_evaluate_declare_var(instance, size):
 		def evaluate_declare_var(ops):
@@ -168,6 +206,8 @@ _else_{self.depth}_{self.label_counter}:
 
 	def __init__(self, expr, variables={}, depth=0, debug=False):
 		if type(expr) == str:
+			expr = re.sub("/\*.*?\*/", "", expr)
+			expr = re.sub("//.*(\n|$)", "\n", expr)
 			self.words = list(filter(None, re.split("([\{\}\(\)/\*-]|\++|[0-9]+|[a-zA-Z_][a-zA-Z0-9_]*|;)|\s+", expr)))
 		elif type(expr) == list:
 			self.words = expr[:]
@@ -195,8 +235,10 @@ _else_{self.depth}_{self.label_counter}:
 				}
 		self.keywords = {
 				"if":{"prec":-1,"nargs":2, "what":self.evaluate_if},
+				"while":{"prec":-1,"nargs":2, "what":self.evaluate_while},
 				"int":{"prec":0,"nargs":1, "what":Expression.META_evaluate_declare_var(self,1), "special_state":"want_new_identifier"},
 				"return":{"prec":-1,"nargs":1, "what":self.evaluate_return},
+				"print":{"prec":-1,"nargs":1, "what":self.evaluate_print},
 				"function":{"prec":0,"nargs":2, "what":Expression.META_evaluate_declare_function(self,1)},
 				#";": {"nargs":0, "what":self.empty_little_stack}
 				"log": {"prec":0,"nargs":1, "what":self.evaluate_log2}

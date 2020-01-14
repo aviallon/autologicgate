@@ -269,7 +269,7 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 						break
 				#print(vals)
 				if ok:
-					def generate_mcode(real_instruction, register_names, uregister_names, vals, mcode_len, relative_addresses):
+					def generate_mcode(real_instruction, params, register_names, uregister_names, vals, mcode_len, relative_addresses):
 						mcode = []
 						for placeholder in placeholders:
 							real_instruction = real_instruction.replace("%b", str(placeholder), 1)
@@ -281,7 +281,17 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 						if verbose:
 							print("\tReal instruction :", real_instruction, end=' ')
 							print("("+hex(instructions_sorted.index(real_instruction))+")", end=' ')
-							for val in vals:
+							cursor = 0
+							for param in params:
+								val = ""
+								if param == "??":
+									val = vals[cursor]
+									cursor += 1
+								elif str(param)[0] == "$":
+									val = vals[int(param[1:])-1]
+								else:
+									val = param
+									
 								if type(val) == int:
 									val = hex(val)
 								print(val, end=' ')
@@ -293,27 +303,51 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 						
 						instruction_code = hex(instructions_sorted.index(real_instruction))[2:].zfill(8//4)
 						mcode += [instruction_code]
-						for inst_data in vals:
+						
+						def _add_data(inst_data, mcode_len):
+							mcode = []
+							rel_addr = []
 							if inst_data in jumplist:
 								mcode += [inst_data]
-							elif type(inst_data) == tuple:
-									relative_addresses += [len(mcode)+mcode_len]
+							elif type(inst_data) == tuple: # means we have an address
+								if inst_data[0]: # we have a relative address
+									rel_addr += [len(mcode)+mcode_len]
 									mcode += [inst_data[1]]
+								else:
+									mcode += [hex(inst_data[1])[2:].zfill(8//4)]
 							else:
 								mcode += [hex(inst_data)[2:].zfill(8//4)]
+								
+							if debug:
+								print("_add_data:", "inst_data=", inst_data, "rel_addr=", rel_addr, "mcode=", mcode)
+								
+							return mcode, rel_addr
+						
+						cursor = 0
+						for param in params:
+							mcode_tmp, reladdr_tmp = [], []
+							if debug:
+								print("param:", param)
+							val = ""
+							if param == "??":
+								val = vals[cursor]
+								cursor += 1
+							elif str(param)[0] == "$":
+								val = vals[int(param[1:])-1]
+							else:
+								val = param
+							if debug:
+								print("val:", val)
+							mcode_tmp, reladdr_tmp = _add_data(val, mcode_len+len(mcode))
+							mcode += mcode_tmp
+							relative_addresses += reladdr_tmp
+
 						return mcode
 								
-					parent = instruction['instructions'][k]
-					if type(parent) == tuple:
-						for t, real_instruction_dad in enumerate(parent):
-							real_instruction = real_instruction_dad[0]
-							if t == len(parent) - 1:
-								machine_code += generate_mcode(real_instruction, register_names, uregister_names, vals, len(machine_code), relative_addresses)
-							else:
-								machine_code += generate_mcode(real_instruction, [], [], [], len(machine_code))
-					else:
-						real_instruction = parent[0]
-						machine_code += generate_mcode(real_instruction, register_names, uregister_names, vals, len(machine_code), relative_addresses)
+					instruction_list = instruction['instructions'][k]
+					params = instruction_list[1:]
+					real_instruction = instruction_list[0]
+					machine_code += generate_mcode(real_instruction, params, register_names, uregister_names, vals, len(machine_code), relative_addresses)
 					
 					
 					if len(machine_code) > 2**address_bits:
@@ -332,6 +366,7 @@ def assembler(data, address_bits=8, debug=False, verbose=True):
 	mcode_len = len(machine_code)
 	rel_vars = {}
 	for rel_addr in relative_addresses:
+		#print(machine_code[rel_addr])
 		new_addr = machine_code[rel_addr]+mcode_len
 		rel_vars[new_addr] = rel_addr
 		if verbose:

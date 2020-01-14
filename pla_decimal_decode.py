@@ -29,7 +29,7 @@ for i in range(0, 2**nbits):
 	nombres[i] = [convert_table[centaines], convert_table[dizaines], convert_table[unites]]
 
 for i in range(len(nombres[0])):
-	with open(f"digit_decoder_{i}.txt", "w") as file:
+	with open(f"digit_decoder_{i}.pla", "w") as file:
 		file.write("# Logisim PLA program table\n")
 		for nombre in nombres:
 			nombre_bin = bin(nombre)[2:].zfill(nbits)

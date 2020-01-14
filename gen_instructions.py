@@ -68,11 +68,11 @@ def gen_instructions():
 	file1_concat = "\n".join(file1_lines)
 	file2_concat = "\n".join(file2_lines)
 	
-	with open("instructions1.txt", 'w') as file:
+	with open("instructions1.rom", 'w') as file:
 		file.write("v2.0 raw\n")
 		file.write(file1_concat)
 		
-	with open("instructions2.txt", 'w') as file:
+	with open("instructions2.rom", 'w') as file:
 		file.write("v2.0 raw\n")
 		file.write(file2_concat)
 	

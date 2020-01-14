@@ -171,10 +171,10 @@ instructions = {
 				["outALU", "loadA"],
 				["clearMIcounter"]
 				],
-		"COPY": [ # 0x1F
+		"COPY_mem": [ # 0x1F
 				["outPC", "loadRAM"],
-				["outRAM", "loadMemAddr", "incPC"],
-				["outMemAddr", "loadRAM"],
+				["outRAM", "loadMemAddr", "incPC"], # on charge l'addresse de la variable stockée dans Mem Addr
+				["outMemAddr", "loadRAM"], # et on y va
 				["outRAM", "loadB"],
 				["outPC", "loadRAM"],
 				["outRAM", "loadMemAddr", "incPC"],
@@ -590,7 +590,7 @@ high_lvl_instructions = {
 						 ["LOAD_ptr_to_R", "??"],
 						 ["LOAD_const_to_R", "??"],
 						 ["STORE_R_to_address", "??"],
-						 ["COPY", "??", "??"],
+						 ["COPY_mem", "$2", "$1"],
 						 ["STORE_const_to_address", "??", "??"]
 						 ],
 				"description":"Move a value from a register/memory address/const to a register or a memory address"
@@ -600,7 +600,7 @@ high_lvl_instructions = {
 				"variants": ["R", "@0xHH"],
 				"instructions":[
 						 ["DISPLAY_R"],
-						 ["DISPLAY_mem"]
+						 ["DISPLAY_mem", "??"]
 						 ],
 				"description":"Display a value contained in specified register/memory address as an unsigned integer."
 			 },
@@ -620,9 +620,9 @@ high_lvl_instructions = {
 				"instructions":[
 						 ["XOR_A_to_A"],
 						 ["XOR_U#_to_U#"],
-						 (["XOR_B_to_B"], ["STORE_B_to_address", "??"]),
+						 ["STORE_const_to_address", 0x00, "??"]
 						 ],
-				"description":"Clear a register/mem address. Clears B if parameter is an address"
+				"description":"Clear a register address."
 			 },
 		"OR":
 			{
